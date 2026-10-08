@@ -117,13 +117,19 @@
       </div>
 
       <!-- Feature Cards Grid (Depth Cards) -->
-      <section class="feature-cards-section" id="features">
+      <section class="landing-section" id="features">
+        <div class="section-header">
+          <div class="hero-pill-badge"><span class="dot"></span> CORE CAPABILITIES</div>
+          <h2 class="section-title">Built for instant peer collaboration</h2>
+          <p class="section-subtitle">Everything needed for frictionless co-working in classrooms, hackathons, and coffee shops.</p>
+        </div>
+
         <div class="feature-cards-grid">
           <div class="feature-card">
             <div class="card-number-tag">01 / DISCOVERY</div>
             <h3>Instant Wi-Fi Pairing</h3>
             <p>
-              Auto-detects your local network IPv4 address. Teammates connect instantly by opening your IP or entering a memorable 6-character session code.
+              Auto-detects your local network IPv4 address. Teammates connect instantly by opening your IP address or entering a memorable 6-character session code.
             </p>
             <div class="card-status-badge">
               <span style="color: var(--status-emerald);">●</span> Zero Install for Peers
@@ -134,7 +140,7 @@
             <div class="card-number-tag">02 / COLLABORATION</div>
             <h3>Real-Time CRDT Merging</h3>
             <p>
-              Multiple coders editing the same line at the same millisecond. Powered by Yjs with live remote collaborator carets, names, and colored selections.
+              Multiple coders editing the same line simultaneously. Powered by Yjs with live remote collaborator carets, names, and colored selections.
             </p>
             <div class="card-status-badge">
               <span style="color: var(--accent-lime); background: #000; border-radius: 3px; padding: 0 4px;">●</span> Eventual Consistency
@@ -153,10 +159,96 @@
           </div>
         </div>
       </section>
+
+      <!-- How It Works Section (Numbered Steps) -->
+      <section class="landing-section" id="how-it-works">
+        <div class="section-header">
+          <div class="hero-pill-badge"><span class="dot" style="background-color: var(--accent-lime); border: 1px solid #000;"></span> ARCHITECTURE & WORKFLOW</div>
+          <h2 class="section-title">How FriKode works across Wi-Fi</h2>
+          <p class="section-subtitle">A peer-to-peer developer experience designed to get your team writing code together in under 30 seconds.</p>
+        </div>
+
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-num">01</div>
+            <div class="step-content">
+              <h3>Host Opens Workspace</h3>
+              <p>One developer launches FriKode and selects their project directory. The local Python backend discovers the Wi-Fi IP and spins up the HTTP & WebSocket server on port 4000.</p>
+              <div class="step-meta"><code>python3 run.py --workspace ./project</code></div>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-num">02</div>
+            <div class="step-content">
+              <h3>Teammates Connect Instantly</h3>
+              <p>Peers on the same Wi-Fi open the host's local IP or enter the 6-character session code. The entire client web app loads directly from the host with zero downloads required.</p>
+              <div class="step-meta"><code>http://192.168.1.105:4000</code></div>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-num">03</div>
+            <div class="step-content">
+              <h3>Simultaneous CRDT Editing</h3>
+              <p>Every keystroke synchronizes in real time via Yjs CRDTs over WebSockets. Multiple cursors and selections float live across the code with zero collision risk.</p>
+              <div class="step-meta"><code>Conflict-Free Replicated Data Types</code></div>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-num">04</div>
+            <div class="step-content">
+              <h3>Local Host Disk Persistence</h3>
+              <p>When any collaborator hits save or pauses typing, the host writes changes safely to its local disk. When the session ends, the host machine retains the complete updated project.</p>
+              <div class="step-meta"><code>100% On-Device Storage</code></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Security & Trust Boundaries Section -->
+      <section class="landing-section" id="security">
+        <div class="section-header">
+          <div class="hero-pill-badge"><span class="dot" style="background-color: var(--status-cyan);"></span> PRIVACY & TRUST BOUNDARIES</div>
+          <h2 class="section-title">Built for local-network security</h2>
+          <p class="section-subtitle">No cloud servers, no account databases, and no telemetry. Your code never leaves your room.</p>
+        </div>
+
+        <div class="security-grid">
+          <div class="security-card">
+            <div class="security-card-icon">🛡️</div>
+            <h3>Canonical Workspace Jail</h3>
+            <p>Every file read, write, or delete request resolves canonical paths using <code>os.path.realpath</code>. Attempts to traverse outside the workspace root (e.g. <code>../../etc/passwd</code> or <code>~/.ssh</code>) are strictly denied with an HTTP 403 Forbidden error.</p>
+            <div class="security-badge">Enforced via path.commonpath</div>
+          </div>
+
+          <div class="security-card">
+            <div class="security-card-icon">📡</div>
+            <h3>Zero Cloud Telemetry</h3>
+            <p>FriKode operates entirely on your local area network (LAN). All keystrokes, diffs, and presence packets are transmitted directly between local devices without bouncing off third-party servers.</p>
+            <div class="security-badge">100% Air-Gapped Capable</div>
+          </div>
+
+          <div class="security-card">
+            <div class="security-card-icon">💻</div>
+            <h3>Host Authority Control</h3>
+            <p>The host machine owns the filesystem and has the sole authority to start or terminate the session. When the host ends the session, peer access is immediately revoked and all active WebSockets close.</p>
+            <div class="security-badge">Host Session Termination</div>
+          </div>
+
+          <div class="security-card">
+            <div class="security-card-icon">🔒</div>
+            <h3>Local Trust Boundary</h3>
+            <p>Designed for trusted teammates in the same physical space. If deploying across unverified or public Wi-Fi networks, we recommend pairing FriKode with an encrypted local reverse proxy.</p>
+            <div class="security-badge">LAN Subnet Boundary</div>
+          </div>
+        </div>
+      </section>
     </section>
 
     <!-- ===================================================================
-         VIEW 2: TECHNICAL COLLABORATIVE WORKSPACE
+         VIEW 2: TECHNICAL COLLABORATIVE WORKSPACE (MAILERBOT WORKSTATION)
          =================================================================== -->
     <section id="workspaceView" class="view workspace-view" aria-label="FriKode Workspace">
       <!-- Top Navigation Bar -->
@@ -217,10 +309,10 @@
 
       <!-- Main Workspace (Sidebar + Editor + Drawer) -->
       <div class="workspace-main">
-        <!-- Sidebar / File Explorer -->
+        <!-- Sidebar / File Explorer (Industrial Warm Canvas) -->
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-header">
-            <span class="sidebar-title">Files</span>
+            <span class="sidebar-title">01 / Files</span>
             <div class="sidebar-actions">
               <button class="icon-btn" id="btnNewFile" title="New File">
                 <span id="newFileIcon"></span>
@@ -284,12 +376,12 @@
             </button>
           </div>
 
-          <div class="drawer-section-title">Active Peers</div>
+          <div class="drawer-section-title">02 / Active Peers</div>
           <div class="peers-list" id="peersList">
             <!-- Rendered dynamically -->
           </div>
 
-          <div class="drawer-section-title">Activity Feed</div>
+          <div class="drawer-section-title">03 / Activity Feed</div>
           <div class="activity-feed" id="activityFeed">
             <!-- Activity log items -->
           </div>
@@ -312,7 +404,7 @@
 
         <div class="statusbar-right">
           <div class="status-item" id="statusNetworkPing">
-            <span class="wifi-indicator" style="width: 6px; height: 6px; border-radius: 50%; background: #45c989; display: inline-block;"></span>
+            <span class="wifi-indicator" style="width: 7px; height: 7px; border-radius: 50%; background: #45c989; display: inline-block;"></span>
             <span id="statusPingText">Local Wi-Fi • Ping: 1ms</span>
           </div>
           <div class="status-item">

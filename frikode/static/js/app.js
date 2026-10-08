@@ -133,6 +133,18 @@ class FriKodeApp {
     bindClick("btnNavHost", () => this.openHostModal());
     bindClick("btnNavJoin", () => this.openJoinModal());
 
+    // Landing Nav Smooth Scrolling
+    document.querySelectorAll(".landing-nav-links a").forEach(anchor => {
+      anchor.addEventListener("click", (e) => {
+        e.preventDefault();
+        const targetId = anchor.getAttribute("href")?.replace("#", "");
+        const targetEl = document.getElementById(targetId);
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: "smooth" });
+        }
+      });
+    });
+
     // Home Hero Action Buttons
     bindClick("btnHostCard", () => this.openHostModal());
     bindClick("btnOpenHostModal", (e) => { e.stopPropagation(); this.openHostModal(); });

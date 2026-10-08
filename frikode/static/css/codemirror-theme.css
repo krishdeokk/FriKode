@@ -1,12 +1,12 @@
 /* ===================================================================
    FriKode CodeMirror Custom Theme
-   Deep Charcoal / Navy foundation with accessible syntax highlights
+   Deep Charcoal / Navy foundation with MailerBot Acid-Lime (#e9ffa3)
    =================================================================== */
 
 .cm-s-frikode.CodeMirror {
-  background-color: #0d1117;
-  color: #e6edf3;
-  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background-color: #0c1017;
+  color: #f1f5f9;
+  font-family: "Roboto Mono", "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13.5px;
   line-height: 1.6;
   letter-spacing: -0.01em;
@@ -14,33 +14,34 @@
 }
 
 .cm-s-frikode .CodeMirror-gutters {
-  background-color: #0d1117;
-  border-right: 1px solid #21262d;
-  color: #484f58;
-  padding-right: 8px;
+  background-color: #0c1017;
+  border-right: 1px solid #1e2638;
+  color: #4b5563;
+  padding-right: 10px;
 }
 
 .cm-s-frikode .CodeMirror-linenumber {
-  color: #6e7681;
+  color: #64748b;
   font-size: 12px;
 }
 
+/* MailerBot Acid-Lime Caret */
 .cm-s-frikode .CodeMirror-cursor {
-  border-left: 2px solid #22d3ee;
+  border-left: 2px solid #e9ffa3;
 }
 
 .cm-s-frikode .CodeMirror-selected {
-  background-color: rgba(56, 189, 248, 0.22);
+  background-color: rgba(233, 255, 163, 0.22);
 }
 
 .cm-s-frikode.CodeMirror-focused .CodeMirror-selected {
-  background-color: rgba(56, 189, 248, 0.28);
+  background-color: rgba(233, 255, 163, 0.28);
 }
 
 .cm-s-frikode .CodeMirror-line::selection,
 .cm-s-frikode .CodeMirror-line > span::selection,
 .cm-s-frikode .CodeMirror-line > span > span::selection {
-  background-color: rgba(56, 189, 248, 0.28);
+  background-color: rgba(233, 255, 163, 0.28);
 }
 
 .cm-s-frikode .CodeMirror-activeline-background {
@@ -48,95 +49,95 @@
 }
 
 .cm-s-frikode .CodeMirror-matchingbracket {
-  outline: 1px solid #38bdf8;
+  outline: 1.5px solid #e9ffa3;
   color: #ffffff !important;
   border-radius: 2px;
 }
 
 /* Syntax Highlighting */
 .cm-s-frikode span.cm-keyword {
-  color: #ff7b72;
+  color: #f43f5e;
   font-weight: 600;
 }
 
 .cm-s-frikode span.cm-def {
-  color: #d2a8ff;
-  font-weight: 500;
+  color: #e9ffa3;
+  font-weight: 600;
 }
 
 .cm-s-frikode span.cm-variable {
-  color: #e6edf3;
+  color: #f1f5f9;
 }
 
 .cm-s-frikode span.cm-variable-2 {
-  color: #79c0ff;
+  color: #7dd3fc;
 }
 
 .cm-s-frikode span.cm-variable-3,
 .cm-s-frikode span.cm-type {
-  color: #ffa657;
+  color: #fbbf24;
 }
 
 .cm-s-frikode span.cm-property {
-  color: #79c0ff;
+  color: #7dd3fc;
 }
 
 .cm-s-frikode span.cm-operator {
-  color: #79c0ff;
+  color: #38bdf8;
 }
 
 .cm-s-frikode span.cm-comment {
-  color: #8b949e;
+  color: #64748b;
   font-style: italic;
 }
 
 .cm-s-frikode span.cm-string {
-  color: #a5d6ff;
+  color: #86efac;
 }
 
 .cm-s-frikode span.cm-string-2 {
-  color: #7ee787;
+  color: #4ade80;
 }
 
 .cm-s-frikode span.cm-number {
-  color: #79c0ff;
+  color: #f0c46a;
 }
 
 .cm-s-frikode span.cm-atom {
-  color: #ff7b72;
+  color: #f43f5e;
 }
 
 .cm-s-frikode span.cm-builtin {
-  color: #ffa657;
+  color: #fbbf24;
 }
 
 .cm-s-frikode span.cm-tag {
-  color: #7ee787;
+  color: #f43f5e;
 }
 
 .cm-s-frikode span.cm-attribute {
-  color: #79c0ff;
+  color: #7dd3fc;
 }
 
 .cm-s-frikode span.cm-header {
-  color: #d2a8ff;
+  color: #c084fc;
   font-weight: bold;
 }
 
 .cm-s-frikode span.cm-link {
-  color: #58a6ff;
+  color: #38bdf8;
   text-decoration: underline;
 }
 
 .cm-s-frikode span.cm-error {
-  color: #f85149;
-  border-bottom: 1px dashed #f85149;
+  color: #f43f5e;
+  border-bottom: 1px dashed #f43f5e;
 }
 
 /* Scrollbars */
 .cm-s-frikode .CodeMirror-scrollbar-filler,
 .cm-s-frikode .CodeMirror-gutter-filler {
-  background-color: #0d1117;
+  background-color: #0c1017;
 }
 
 /* ===================================================================
@@ -156,17 +157,17 @@
 
 .remote-caret > div {
   position: absolute;
-  top: -1.4em;
+  top: -1.45em;
   left: -2px;
   font-size: 10.5px;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-weight: 600;
-  color: #0b0f17;
-  padding: 1px 6px;
+  font-family: "Roboto Mono", monospace;
+  font-weight: 700;
+  color: #050505;
+  padding: 1px 7px;
   border-radius: 4px;
   white-space: nowrap;
   pointer-events: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   transition: opacity 0.25s ease-out;
   opacity: 1;
 }
@@ -183,4 +184,3 @@
   border-radius: 2px;
   opacity: 0.35;
 }
-
