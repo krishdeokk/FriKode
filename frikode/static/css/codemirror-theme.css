@@ -1,0 +1,186 @@
+/* ===================================================================
+   FriKode CodeMirror Custom Theme
+   Deep Charcoal / Navy foundation with accessible syntax highlights
+   =================================================================== */
+
+.cm-s-frikode.CodeMirror {
+  background-color: #0d1117;
+  color: #e6edf3;
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  height: 100%;
+}
+
+.cm-s-frikode .CodeMirror-gutters {
+  background-color: #0d1117;
+  border-right: 1px solid #21262d;
+  color: #484f58;
+  padding-right: 8px;
+}
+
+.cm-s-frikode .CodeMirror-linenumber {
+  color: #6e7681;
+  font-size: 12px;
+}
+
+.cm-s-frikode .CodeMirror-cursor {
+  border-left: 2px solid #22d3ee;
+}
+
+.cm-s-frikode .CodeMirror-selected {
+  background-color: rgba(56, 189, 248, 0.22);
+}
+
+.cm-s-frikode.CodeMirror-focused .CodeMirror-selected {
+  background-color: rgba(56, 189, 248, 0.28);
+}
+
+.cm-s-frikode .CodeMirror-line::selection,
+.cm-s-frikode .CodeMirror-line > span::selection,
+.cm-s-frikode .CodeMirror-line > span > span::selection {
+  background-color: rgba(56, 189, 248, 0.28);
+}
+
+.cm-s-frikode .CodeMirror-activeline-background {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.cm-s-frikode .CodeMirror-matchingbracket {
+  outline: 1px solid #38bdf8;
+  color: #ffffff !important;
+  border-radius: 2px;
+}
+
+/* Syntax Highlighting */
+.cm-s-frikode span.cm-keyword {
+  color: #ff7b72;
+  font-weight: 600;
+}
+
+.cm-s-frikode span.cm-def {
+  color: #d2a8ff;
+  font-weight: 500;
+}
+
+.cm-s-frikode span.cm-variable {
+  color: #e6edf3;
+}
+
+.cm-s-frikode span.cm-variable-2 {
+  color: #79c0ff;
+}
+
+.cm-s-frikode span.cm-variable-3,
+.cm-s-frikode span.cm-type {
+  color: #ffa657;
+}
+
+.cm-s-frikode span.cm-property {
+  color: #79c0ff;
+}
+
+.cm-s-frikode span.cm-operator {
+  color: #79c0ff;
+}
+
+.cm-s-frikode span.cm-comment {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.cm-s-frikode span.cm-string {
+  color: #a5d6ff;
+}
+
+.cm-s-frikode span.cm-string-2 {
+  color: #7ee787;
+}
+
+.cm-s-frikode span.cm-number {
+  color: #79c0ff;
+}
+
+.cm-s-frikode span.cm-atom {
+  color: #ff7b72;
+}
+
+.cm-s-frikode span.cm-builtin {
+  color: #ffa657;
+}
+
+.cm-s-frikode span.cm-tag {
+  color: #7ee787;
+}
+
+.cm-s-frikode span.cm-attribute {
+  color: #79c0ff;
+}
+
+.cm-s-frikode span.cm-header {
+  color: #d2a8ff;
+  font-weight: bold;
+}
+
+.cm-s-frikode span.cm-link {
+  color: #58a6ff;
+  text-decoration: underline;
+}
+
+.cm-s-frikode span.cm-error {
+  color: #f85149;
+  border-bottom: 1px dashed #f85149;
+}
+
+/* Scrollbars */
+.cm-s-frikode .CodeMirror-scrollbar-filler,
+.cm-s-frikode .CodeMirror-gutter-filler {
+  background-color: #0d1117;
+}
+
+/* ===================================================================
+   Remote Collaborative Cursors & Selection Markers
+   =================================================================== */
+
+.remote-caret {
+  position: absolute;
+  border-left: 2px solid;
+  margin-left: -1px;
+  margin-right: -1px;
+  box-sizing: border-box;
+  z-index: 10;
+  height: 1.3em;
+  pointer-events: none;
+}
+
+.remote-caret > div {
+  position: absolute;
+  top: -1.4em;
+  left: -2px;
+  font-size: 10.5px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-weight: 600;
+  color: #0b0f17;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.25s ease-out;
+  opacity: 1;
+}
+
+.remote-caret.hide-name > div {
+  opacity: 0;
+}
+
+.remote-caret:hover > div {
+  opacity: 1 !important;
+}
+
+.y-line-selection {
+  border-radius: 2px;
+  opacity: 0.35;
+}
+

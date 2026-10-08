@@ -1,0 +1,14 @@
+{
+  "project": "FriKode Local Demo",
+  "version": "1.0.0",
+  "network": {
+    "mode": "peer-mesh",
+    "port": 4000,
+    "protocol": "ws"
+  },
+  "features": [
+    "real-time crdt",
+    "presence cursors",
+    "zero cloud dependency"
+  ]
+}
