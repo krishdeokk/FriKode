@@ -360,6 +360,53 @@ class FriKodeServer:
                             "peer": self.peers[client_id]
                         }, exclude_ws=ws)
 
+                    elif msg_type == "update_profile":
+                        if client_id and client_id in self.peers:
+                            old_name = self.peers[client_id]["name"]
+                            new_name = (payload.get("name") or old_name).strip() or old_name
+                            new_color = payload.get("color") or self.peers[client_id]["color"]
+                            new_role = payload.get("role")
+
+                            self.peers[client_id]["name"] = new_name
+                            self.peers[client_id]["color"] = new_color
+
+                            if new_role and new_role in ("host", "participant", "peer"):
+                                if new_role == "host":
+                                    for pid, p in self.peers.items():
+                                        if pid != client_id and p.get("role") == "host":
+                                            p["role"] = "participant"
+                                    self.peers[client_id]["role"] = "host"
+                                else:
+                                    self.peers[client_id]["role"] = new_role
+
+                            await self.broadcast_peers()
+                            if old_name != new_name:
+                                await self.broadcast_collaboration({
+                                    "type": "activity",
+                                    "text": f"{old_name} is now known as {new_name}"
+                                })
+
+                    elif msg_type == "transfer_host":
+                        target_id = payload.get("target_id")
+                        if target_id and target_id in self.peers:
+                            old_host_name = self.peers[client_id]["name"] if client_id and client_id in self.peers else "Host"
+                            for pid, p in self.peers.items():
+                                p["role"] = "participant"
+                            self.peers[target_id]["role"] = "host"
+                            new_host_name = self.peers[target_id]["name"]
+
+                            await self.broadcast_peers()
+                            await self.broadcast_collaboration({
+                                "type": "host_transferred",
+                                "target_id": target_id,
+                                "old_host_name": old_host_name,
+                                "new_host_name": new_host_name
+                            })
+                            await self.broadcast_collaboration({
+                                "type": "activity",
+                                "text": f"Host position transferred to {new_host_name}"
+                            })
+
                     elif msg_type == "file_focus":
                         if client_id and client_id in self.peers:
                             self.peers[client_id]["active_file"] = payload.get("file")
@@ -396,6 +443,8 @@ class FriKodeServer:
             }
             for p in self.peers.values()
         ]
+        # Sort so Host is always in first position
+        peer_list.sort(key=lambda x: (0 if x.get("role") == "host" else 1, x.get("name", "")))
         await self.broadcast_collaboration({
             "type": "peers_update",
             "peers": peer_list

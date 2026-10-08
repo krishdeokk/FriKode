@@ -977,11 +977,141 @@ html, body {
   cursor: pointer;
   transition: transform 0.15s;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative;
 }
 
 .collaborator-avatar:hover {
   transform: translateY(-2px) scale(1.15);
-  z-index: 5;
+  z-index: 50;
+}
+
+/* User Profile & Role Button in Topbar */
+.user-profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid var(--canvas-border);
+  border-radius: 8px;
+  padding: 4px 10px 4px 6px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  user-select: none;
+  font-family: inherit;
+  color: var(--text-black);
+}
+
+.user-profile-btn:hover {
+  border-color: var(--text-black);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.user-avatar-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 11px;
+  color: #050505;
+  background: var(--accent-lime);
+  border: 1.5px solid rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+.user-profile-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-black);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Immediate Hover Tooltip for Profile & Collaborator Avatars */
+.avatar-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #050505;
+  color: #ffffff;
+  padding: 7px 12px;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s cubic-bezier(0.16, 1, 0.3, 1), transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1000;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.avatar-tooltip::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: #050505;
+}
+
+.collaborator-avatar:hover .avatar-tooltip,
+.user-profile-btn:hover .avatar-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.avatar-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.avatar-tooltip-name {
+  font-weight: 750;
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.avatar-tooltip-badge {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+}
+
+.avatar-tooltip-badge.host {
+  background: var(--accent-lime);
+  color: #050505;
+}
+
+.avatar-tooltip-badge.peer,
+.avatar-tooltip-badge.participant {
+  background: rgba(255, 255, 255, 0.2);
+  color: #f1f5f9;
+}
+
+.avatar-tooltip-sub {
+  font-size: 10px;
+  color: #a1a1aa;
+  font-family: var(--font-mono);
 }
 
 .sync-status-badge {
@@ -1391,6 +1521,111 @@ kbd {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.peer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.peer-mini-btn {
+  background: var(--accent-tan);
+  border: 1px solid var(--canvas-border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--text-black);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.peer-mini-btn:hover {
+  background: var(--text-black);
+  color: #ffffff;
+}
+
+.peer-mini-btn.lime {
+  background: var(--accent-lime);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.peer-mini-btn.lime:hover {
+  background: var(--text-black);
+  color: var(--accent-lime);
+}
+
+/* Role Selector in Profile Modal */
+.role-selector-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.role-option-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1.5px solid var(--canvas-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.role-option-card:hover {
+  border-color: var(--text-black);
+}
+
+.role-option-card.selected {
+  border-color: var(--text-black);
+  background: rgba(233, 255, 163, 0.15);
+  box-shadow: 0 0 0 1px var(--text-black);
+}
+
+.role-option-card input[type="radio"] {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.role-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 20px;
+}
+
+.role-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.role-card-title {
+  font-weight: 750;
+  font-size: 13px;
+  color: var(--text-black);
+}
+
+.role-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.transfer-host-section {
+  background: var(--canvas-bg);
+  border: 1.5px solid var(--canvas-border);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .activity-feed {

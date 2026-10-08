@@ -283,6 +283,20 @@
             <!-- Rendered dynamically -->
           </div>
 
+          <!-- User Profile & Host Position Pill -->
+          <button class="user-profile-btn" id="btnUserProfile" title="Click to edit name and host position">
+            <span class="user-avatar-dot" id="userProfileDot">D</span>
+            <span class="user-profile-name" id="userProfileName">Developer</span>
+            <span class="badge-role host" id="userProfileRoleBadge">Host</span>
+            <div class="avatar-tooltip">
+              <div class="avatar-tooltip-header">
+                <span class="avatar-tooltip-name" id="userTooltipName">Developer (You)</span>
+                <span class="avatar-tooltip-badge host" id="userTooltipRole">HOST</span>
+              </div>
+              <div class="avatar-tooltip-sub">Click to edit name & host position</div>
+            </div>
+          </button>
+
           <!-- Sync Status -->
           <div class="sync-status-badge" id="syncStatusBadge" title="Save status to host disk">
             <span class="sync-dot" id="syncStatusDot"></span>
@@ -440,6 +454,20 @@
             <span class="form-help">Files on this laptop will be shared directly with peers over your local Wi-Fi.</span>
           </div>
 
+          <div class="form-group">
+            <label class="form-label" for="hostNameInput">
+              Your Display Name
+            </label>
+            <input type="text" class="form-input" id="hostNameInput" placeholder="e.g. Krish" maxlength="24">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Cursor Color</label>
+            <div class="color-swatches" id="hostColorSwatches">
+              <!-- Swatches generated dynamically -->
+            </div>
+          </div>
+
           <!-- Network Info Review -->
           <div class="network-info-card">
             <div class="network-field">
@@ -579,6 +607,78 @@
         </div>
         <div class="modal-footer" style="justify-content: center;">
           <button class="mbot-btn mbot-btn-lime" id="btnReturnHome" style="padding: 9px 24px;">Return to Home</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Profile & Host Position Modal -->
+    <div class="modal-backdrop" id="profileModal">
+      <div class="modal-box" style="max-width: 480px;">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span id="modalProfileIcon"></span>
+            <span>Profile & Session Position</span>
+          </div>
+          <button class="modal-close-btn" id="btnCloseProfileModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="profileNameInput">Your Display Name</label>
+            <input type="text" class="form-input" id="profileNameInput" placeholder="e.g. Krish" maxlength="24">
+            <span class="form-help">Displayed in the top bar, peer list, and over your live collaborative cursor.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Cursor & Avatar Color</label>
+            <div class="color-swatches" id="profileColorSwatches">
+              <!-- Swatches generated dynamically -->
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Host Position & Role</label>
+            <div class="role-selector-grid">
+              <label class="role-option-card" id="cardRoleHost">
+                <input type="radio" name="profileRoleOption" value="host" id="radioRoleHost">
+                <div class="role-card-content">
+                  <div class="role-card-header">
+                    <span class="badge-role host">HOST</span>
+                    <span class="role-card-title">Host Position</span>
+                  </div>
+                  <p class="role-card-desc">Session owner. Files are stored on this machine.</p>
+                </div>
+              </label>
+
+              <label class="role-option-card" id="cardRolePeer">
+                <input type="radio" name="profileRoleOption" value="participant" id="radioRolePeer">
+                <div class="role-card-content">
+                  <div class="role-card-header">
+                    <span class="badge-role peer">PEER</span>
+                    <span class="role-card-title">Participant</span>
+                  </div>
+                  <p class="role-card-desc">Collaborates in real time on shared workspace files.</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Transfer Host Position Section (Visible when peers are present) -->
+          <div class="transfer-host-section" id="transferHostSection" style="display: none;">
+            <label class="form-label">Transfer Host Position to Connected Peer</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <select class="form-input" id="transferHostSelect" style="flex: 1;">
+                <option value="">Select a collaborator...</option>
+              </select>
+              <button class="mbot-btn mbot-btn-lime" id="btnTransferHostConfirm" style="padding: 9px 16px; white-space: nowrap; font-size: 12.5px;">
+                Transfer Host
+              </button>
+            </div>
+            <span class="form-help">Hands over session ownership and host badges to another collaborator.</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="mbot-btn mbot-btn-tan" id="btnCancelProfile" style="padding: 8px 18px; font-size: 13px;">Cancel</button>
+          <button class="mbot-btn mbot-btn-lime" id="btnSaveProfile" style="padding: 8px 20px; font-size: 13px;">Save Changes</button>
         </div>
       </div>
     </div>

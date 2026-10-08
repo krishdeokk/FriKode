@@ -66,10 +66,11 @@ class FriKodeApp {
     setIcon("modalCopyCodeIcon", Icons.copy);
     setIcon("topbarCopyIcon", Icons.copy);
     setIcon("closeActivityIcon", Icons.close);
+    setIcon("modalProfileIcon", Icons.users);
   }
 
-  _initColorSwatches() {
-    const container = document.getElementById("colorSwatches");
+  _initColorSwatches(containerId = "colorSwatches", onColorSelect = null) {
+    const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = "";
     ACCENT_COLORS.forEach(color => {
@@ -84,6 +85,8 @@ class FriKodeApp {
         if (this.editorManager) {
           this.editorManager.setUser(this.user.name, this.user.color);
         }
+        this._updateUserProfileButton();
+        if (onColorSelect) onColorSelect(color);
       };
       container.appendChild(swatch);
     });
@@ -169,6 +172,32 @@ class FriKodeApp {
     bindClick("btnTestJoinConnection", () => this.testJoinPing());
     bindClick("btnConfirmJoin", () => this.confirmJoin());
 
+    // Profile & Host Role Modal
+    bindClick("btnUserProfile", () => this.openProfileModal());
+    bindClick("btnCloseProfileModal", () => this.closeModal("profileModal"));
+    bindClick("btnCancelProfile", () => this.closeModal("profileModal"));
+    bindClick("btnSaveProfile", () => this.confirmSaveProfile());
+    bindClick("btnTransferHostConfirm", () => this.confirmTransferHostFromModal());
+
+    const cardHost = document.getElementById("cardRoleHost");
+    const cardPeer = document.getElementById("cardRolePeer");
+    if (cardHost) {
+      cardHost.onclick = () => {
+        const radio = document.getElementById("radioRoleHost");
+        if (radio) radio.checked = true;
+        cardHost.classList.add("selected");
+        if (cardPeer) cardPeer.classList.remove("selected");
+      };
+    }
+    if (cardPeer) {
+      cardPeer.onclick = () => {
+        const radio = document.getElementById("radioRolePeer");
+        if (radio) radio.checked = true;
+        cardPeer.classList.add("selected");
+        if (cardHost) cardHost.classList.remove("selected");
+      };
+    }
+
     // Top Bar Actions
     document.getElementById("btnCopyInvite").onclick = () => {
       const fullUrl = this._getInviteUrl();
@@ -252,6 +281,11 @@ class FriKodeApp {
   // Hosting Flow
   // -------------------------------------------------------------
   async openHostModal() {
+    const nameInput = document.getElementById("hostNameInput");
+    if (nameInput) {
+      nameInput.value = localStorage.getItem("frikode_name") || this.user.name || "Developer";
+    }
+    this._initColorSwatches("hostColorSwatches");
     try {
       this.session = await api.getSession();
       this._updateNetworkUI();
@@ -263,6 +297,10 @@ class FriKodeApp {
 
   async confirmHost() {
     const workspaceInput = document.getElementById("hostWorkspaceInput").value.trim() || "sample_project";
+    const hostName = document.getElementById("hostNameInput")?.value.trim() || localStorage.getItem("frikode_name") || "Developer";
+    this.user.name = hostName;
+    localStorage.setItem("frikode_name", hostName);
+
     try {
       const res = await api.createSession(workspaceInput, false);
       this.session.session_code = res.session_code;
@@ -272,7 +310,6 @@ class FriKodeApp {
     }
 
     this.role = "host";
-    this.user.name = "Host (" + (localStorage.getItem("frikode_name") || "Me") + ")";
     this.editorManager.setUser(this.user.name, this.user.color);
 
     this.closeModal("hostModal");
@@ -364,6 +401,8 @@ class FriKodeApp {
 
     document.getElementById("statusRoleLabel").textContent = this.role === "host" ? "Host (Workspace Owner)" : "Participant (Guest)";
     document.getElementById("leaveText").textContent = this.role === "host" ? "End Session" : "Leave";
+
+    this._updateUserProfileButton();
 
     // Connect Signaling WebSocket
     this._connectSignaling();
@@ -569,8 +608,27 @@ class FriKodeApp {
     switch (msg.type) {
       case "peers_update":
         this.peers = msg.peers || [];
+        // Sync our role if changed by host or server
+        const myPeer = this.peers.find(p => p.id === this.user.id);
+        if (myPeer && myPeer.role && myPeer.role !== this.role) {
+          this.role = myPeer.role;
+        }
         this._renderPeers();
         this._renderFileTree();
+        break;
+
+      case "host_transferred":
+        if (msg.target_id === this.user.id) {
+          this.role = "host";
+          showToast("You are now the Session Host!", "success");
+          this._addActivity("Host position was transferred to you");
+        } else if (this.role === "host") {
+          this.role = "participant";
+          showToast(`Host position transferred to ${msg.new_host_name}`, "info");
+        } else {
+          showToast(`Host position transferred to ${msg.new_host_name}`, "info");
+        }
+        this._updateUserProfileButton();
         break;
 
       case "peer_joined":
@@ -631,13 +689,33 @@ class FriKodeApp {
     countEl.textContent = `${this.peers.length} Collaborator${this.peers.length === 1 ? "" : "s"}`;
 
     this.peers.forEach(peer => {
-      // Avatar pill in topbar
+      const isYou = peer.id === this.user.id;
       const initial = (peer.name || "P")[0].toUpperCase();
+      const isHost = peer.role === "host";
+
+      // Avatar pill in topbar with immediate hover tooltip displaying name & role
       const avatar = document.createElement("div");
       avatar.className = "collaborator-avatar";
       avatar.style.backgroundColor = peer.color || "#22d3ee";
-      avatar.textContent = initial;
-      avatar.title = `${peer.name} (${peer.role})${peer.active_file ? " • " + peer.active_file : ""}`;
+      avatar.innerHTML = `
+        <span>${initial}</span>
+        <div class="avatar-tooltip">
+          <div class="avatar-tooltip-header">
+            <span class="avatar-tooltip-name">${peer.name}${isYou ? " (You)" : ""}</span>
+            <span class="avatar-tooltip-badge ${peer.role}">${isHost ? "HOST" : "PEER"}</span>
+          </div>
+          <div class="avatar-tooltip-sub">${peer.active_file ? "Editing " + peer.active_file : "Active in workspace"}</div>
+        </div>
+      `;
+      avatar.onclick = () => {
+        if (isYou) {
+          this.openProfileModal();
+        } else if (this.role === "host") {
+          this.openProfileModal(peer.id);
+        } else {
+          showToast(`${peer.name} (${peer.role})`, "info");
+        }
+      };
       stack.appendChild(avatar);
 
       // List item in activity drawer
@@ -646,12 +724,187 @@ class FriKodeApp {
       listItem.innerHTML = `
         <span class="peer-color-dot" style="background-color: ${peer.color};"></span>
         <div class="peer-info">
-          <span class="peer-name">${peer.name} ${peer.id === this.user.id ? "(You)" : ""}</span>
-          <span class="peer-file">${peer.active_file || "Browsing files"}</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="peer-name">${peer.name} ${isYou ? "(You)" : ""}</span>
+            <span class="badge-role ${peer.role}" style="font-size: 9px; padding: 1px 5px;">${isHost ? "HOST" : "PEER"}</span>
+          </div>
+          <span class="peer-file">${peer.active_file ? "Editing: " + peer.active_file : "Browsing files"}</span>
+        </div>
+        <div class="peer-actions">
+          ${isYou 
+            ? `<button class="peer-mini-btn" title="Change name or position" data-action="edit-profile">Edit</button>` 
+            : (this.role === "host" ? `<button class="peer-mini-btn lime" title="Make Host" data-action="make-host" data-id="${peer.id}">Make Host</button>` : "")
+          }
         </div>
       `;
+
+      const editBtn = listItem.querySelector('[data-action="edit-profile"]');
+      if (editBtn) {
+        editBtn.onclick = () => this.openProfileModal();
+      }
+      const makeHostBtn = listItem.querySelector('[data-action="make-host"]');
+      if (makeHostBtn) {
+        makeHostBtn.onclick = () => this.transferHostPosition(peer.id, peer.name);
+      }
+
       list.appendChild(listItem);
     });
+
+    this._updateUserProfileButton();
+  }
+
+  _updateUserProfileButton() {
+    const dot = document.getElementById("userProfileDot");
+    const nameEl = document.getElementById("userProfileName");
+    const roleBadge = document.getElementById("userProfileRoleBadge");
+    const tooltipName = document.getElementById("userTooltipName");
+    const tooltipRole = document.getElementById("userTooltipRole");
+
+    const initial = (this.user.name || "D")[0].toUpperCase();
+    if (dot) {
+      dot.style.backgroundColor = this.user.color;
+      dot.textContent = initial;
+    }
+    if (nameEl) {
+      nameEl.textContent = this.user.name;
+    }
+    const isHost = this.role === "host";
+    if (roleBadge) {
+      roleBadge.textContent = isHost ? "Host" : "Peer";
+      roleBadge.className = `badge-role ${isHost ? "host" : "peer"}`;
+    }
+    if (tooltipName) {
+      tooltipName.textContent = `${this.user.name} (You)`;
+    }
+    if (tooltipRole) {
+      tooltipRole.textContent = isHost ? "HOST" : "PEER";
+      tooltipRole.className = `avatar-tooltip-badge ${isHost ? "host" : "peer"}`;
+    }
+
+    const topbarRole = document.getElementById("topbarRoleBadge");
+    if (topbarRole) {
+      topbarRole.textContent = isHost ? "Host" : "Peer";
+      topbarRole.className = `badge-role ${isHost ? "host" : "peer"}`;
+    }
+    const statusRole = document.getElementById("statusRoleLabel");
+    if (statusRole) {
+      statusRole.textContent = isHost ? "Host (Workspace Owner)" : "Participant (Guest)";
+    }
+    const leaveText = document.getElementById("leaveText");
+    if (leaveText) {
+      leaveText.textContent = isHost ? "End Session" : "Leave";
+    }
+  }
+
+  openProfileModal(preselectPeerId = null) {
+    const nameInput = document.getElementById("profileNameInput");
+    if (nameInput) {
+      nameInput.value = this.user.name || "Developer";
+    }
+
+    this._initColorSwatches("profileColorSwatches");
+
+    const radioHost = document.getElementById("radioRoleHost");
+    const radioPeer = document.getElementById("radioRolePeer");
+    const cardHost = document.getElementById("cardRoleHost");
+    const cardPeer = document.getElementById("cardRolePeer");
+
+    if (this.role === "host") {
+      if (radioHost) radioHost.checked = true;
+      if (cardHost) cardHost.classList.add("selected");
+      if (cardPeer) cardPeer.classList.remove("selected");
+    } else {
+      if (radioPeer) radioPeer.checked = true;
+      if (cardPeer) cardPeer.classList.add("selected");
+      if (cardHost) cardHost.classList.remove("selected");
+    }
+
+    const transferSection = document.getElementById("transferHostSection");
+    const transferSelect = document.getElementById("transferHostSelect");
+    const otherPeers = this.peers.filter(p => p.id !== this.user.id);
+
+    if (transferSection && transferSelect) {
+      if (otherPeers.length > 0) {
+        transferSection.style.display = "flex";
+        transferSelect.innerHTML = `<option value="">Select a collaborator...</option>` +
+          otherPeers.map(p => `<option value="${p.id}" ${p.id === preselectPeerId ? "selected" : ""}>${p.name} (${p.role})</option>`).join("");
+      } else {
+        transferSection.style.display = "none";
+      }
+    }
+
+    this.openModal("profileModal");
+    setTimeout(() => {
+      if (nameInput) nameInput.focus();
+    }, 100);
+  }
+
+  confirmSaveProfile() {
+    const nameInput = document.getElementById("profileNameInput");
+    const newName = (nameInput?.value || "").trim() || this.user.name;
+    const selectedRadio = document.querySelector('input[name="profileRoleOption"]:checked');
+    const newRole = selectedRadio ? selectedRadio.value : this.role;
+
+    this.updateProfile(newName, this.user.color, newRole);
+  }
+
+  confirmTransferHostFromModal() {
+    const select = document.getElementById("transferHostSelect");
+    const targetId = select?.value;
+    if (!targetId) {
+      showToast("Please choose a collaborator to transfer host to.", "error");
+      return;
+    }
+    const targetPeer = this.peers.find(p => p.id === targetId);
+    const targetName = targetPeer ? targetPeer.name : "collaborator";
+    this.closeModal("profileModal");
+    this.transferHostPosition(targetId, targetName);
+  }
+
+  transferHostPosition(targetId, targetName) {
+    if (!confirm(`Are you sure you want to transfer the Host position to ${targetName}?`)) {
+      return;
+    }
+    if (this.signalingWs && this.signalingWs.readyState === WebSocket.OPEN) {
+      this.signalingWs.send(JSON.stringify({
+        type: "transfer_host",
+        target_id: targetId
+      }));
+      showToast(`Transferring host position to ${targetName}...`, "info");
+    }
+  }
+
+  updateProfile(newName, newColor, newRole) {
+    newName = (newName || "").trim() || this.user.name;
+    newColor = newColor || this.user.color;
+
+    this.user.name = newName;
+    this.user.color = newColor;
+    localStorage.setItem("frikode_name", newName);
+    localStorage.setItem("frikode_color", newColor);
+
+    if (newRole && newRole !== this.role) {
+      this.role = newRole;
+    }
+
+    // Update editor CRDT awareness
+    if (this.editorManager) {
+      this.editorManager.setUser(this.user.name, this.user.color);
+    }
+
+    // Broadcast over WebSocket signaling
+    if (this.signalingWs && this.signalingWs.readyState === WebSocket.OPEN) {
+      this.signalingWs.send(JSON.stringify({
+        type: "update_profile",
+        name: this.user.name,
+        color: this.user.color,
+        role: this.role
+      }));
+    }
+
+    this._updateUserProfileButton();
+    showToast("Profile updated!", "success");
+    this.closeModal("profileModal");
   }
 
   _addActivity(text) {
