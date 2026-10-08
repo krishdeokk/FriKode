@@ -1,149 +1,161 @@
 /* ===================================================================
    FriKode CodeMirror Custom Theme
-   Deep Charcoal / Navy foundation with MailerBot Acid-Lime (#e9ffa3)
+   MailerBot Consistent Porcelain Canvas (#fffefc) with Acid-Lime Highlights
    =================================================================== */
 
 .cm-s-frikode.CodeMirror {
-  background-color: #0c1017;
-  color: #f1f5f9;
+  background-color: #fffefc;
+  color: #0f172a;
   font-family: "Roboto Mono", "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13.5px;
-  line-height: 1.6;
+  line-height: 1.65;
   letter-spacing: -0.01em;
   height: 100%;
 }
 
 .cm-s-frikode .CodeMirror-gutters {
-  background-color: #0c1017;
-  border-right: 1px solid #1e2638;
-  color: #4b5563;
+  background-color: #fbf9f5;
+  border-right: 1.5px solid #dad1c5;
+  color: #8c8275;
   padding-right: 10px;
 }
 
 .cm-s-frikode .CodeMirror-linenumber {
-  color: #64748b;
+  color: #8c8275;
   font-size: 12px;
+  font-family: "Roboto Mono", monospace;
+  font-weight: 500;
 }
 
-/* MailerBot Acid-Lime Caret */
+/* MailerBot Cursor: Solid Black with clean thickness */
 .cm-s-frikode .CodeMirror-cursor {
-  border-left: 2px solid #e9ffa3;
+  border-left: 2px solid #050505;
 }
 
+/* MailerBot Acid-Lime Text Selection */
 .cm-s-frikode .CodeMirror-selected {
-  background-color: rgba(233, 255, 163, 0.22);
+  background-color: rgba(233, 255, 163, 0.7) !important;
 }
 
 .cm-s-frikode.CodeMirror-focused .CodeMirror-selected {
-  background-color: rgba(233, 255, 163, 0.28);
+  background-color: rgba(233, 255, 163, 0.8) !important;
 }
 
 .cm-s-frikode .CodeMirror-line::selection,
 .cm-s-frikode .CodeMirror-line > span::selection,
 .cm-s-frikode .CodeMirror-line > span > span::selection {
+  background-color: rgba(233, 255, 163, 0.8) !important;
+}
+
+/* Active Line Highlight: Soft Acid-Lime Tint */
+.cm-s-frikode .CodeMirror-activeline-background {
   background-color: rgba(233, 255, 163, 0.28);
 }
 
-.cm-s-frikode .CodeMirror-activeline-background {
-  background-color: rgba(255, 255, 255, 0.03);
-}
-
 .cm-s-frikode .CodeMirror-matchingbracket {
-  outline: 1.5px solid #e9ffa3;
-  color: #ffffff !important;
+  outline: 1.5px solid #050505;
+  background-color: #e9ffa3;
+  color: #050505 !important;
+  font-weight: 800;
   border-radius: 2px;
 }
 
-/* Syntax Highlighting */
+/* High-Contrast Syntax Highlighting */
 .cm-s-frikode span.cm-keyword {
-  color: #f43f5e;
-  font-weight: 600;
+  color: #e11d48;
+  font-weight: 750;
 }
 
 .cm-s-frikode span.cm-def {
-  color: #e9ffa3;
-  font-weight: 600;
+  color: #0284c7;
+  font-weight: 750;
 }
 
 .cm-s-frikode span.cm-variable {
-  color: #f1f5f9;
+  color: #0f172a;
 }
 
 .cm-s-frikode span.cm-variable-2 {
-  color: #7dd3fc;
+  color: #0369a1;
+  font-weight: 600;
 }
 
 .cm-s-frikode span.cm-variable-3,
 .cm-s-frikode span.cm-type {
-  color: #fbbf24;
+  color: #d97706;
+  font-weight: 700;
 }
 
 .cm-s-frikode span.cm-property {
-  color: #7dd3fc;
+  color: #0284c7;
+  font-weight: 600;
 }
 
 .cm-s-frikode span.cm-operator {
-  color: #38bdf8;
+  color: #0369a1;
+  font-weight: 700;
 }
 
 .cm-s-frikode span.cm-comment {
-  color: #64748b;
+  color: #8c8275;
   font-style: italic;
 }
 
 .cm-s-frikode span.cm-string {
-  color: #86efac;
+  color: #15803d;
+  font-weight: 500;
 }
 
 .cm-s-frikode span.cm-string-2 {
-  color: #4ade80;
+  color: #166534;
 }
 
 .cm-s-frikode span.cm-number {
-  color: #f0c46a;
+  color: #d97706;
+  font-weight: 700;
 }
 
 .cm-s-frikode span.cm-atom {
-  color: #f43f5e;
+  color: #e11d48;
+  font-weight: 700;
 }
 
 .cm-s-frikode span.cm-builtin {
-  color: #fbbf24;
+  color: #d97706;
+  font-weight: 700;
 }
 
 .cm-s-frikode span.cm-tag {
-  color: #f43f5e;
+  color: #e11d48;
+  font-weight: 750;
 }
 
 .cm-s-frikode span.cm-attribute {
-  color: #7dd3fc;
+  color: #0284c7;
 }
 
 .cm-s-frikode span.cm-header {
-  color: #c084fc;
-  font-weight: bold;
+  color: #7c3aed;
+  font-weight: 800;
 }
 
 .cm-s-frikode span.cm-link {
-  color: #38bdf8;
+  color: #2563eb;
   text-decoration: underline;
 }
 
 .cm-s-frikode span.cm-error {
-  color: #f43f5e;
-  border-bottom: 1px dashed #f43f5e;
+  color: #ef4444;
+  border-bottom: 1.5px dashed #ef4444;
 }
 
 /* Scrollbars */
 .cm-s-frikode .CodeMirror-scrollbar-filler,
 .cm-s-frikode .CodeMirror-gutter-filler {
-  background-color: #0c1017;
+  background-color: #fbf9f5;
 }
 
-/* ===================================================================
-   Remote Collaborative Cursors & Selection Markers
-   =================================================================== */
-
+/* Remote Collaborative Cursors & Caret Tags */
 .remote-caret {
   position: absolute;
   border-left: 2px solid;
@@ -151,23 +163,24 @@
   margin-right: -1px;
   box-sizing: border-box;
   z-index: 10;
-  height: 1.3em;
+  height: 1.35em;
   pointer-events: none;
 }
 
 .remote-caret > div {
   position: absolute;
-  top: -1.45em;
+  top: -1.5em;
   left: -2px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-family: "Roboto Mono", monospace;
-  font-weight: 700;
+  font-weight: 750;
   color: #050505;
   padding: 1px 7px;
   border-radius: 4px;
   white-space: nowrap;
   pointer-events: none;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   transition: opacity 0.25s ease-out;
   opacity: 1;
 }
