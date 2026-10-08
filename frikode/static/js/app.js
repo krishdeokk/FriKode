@@ -48,24 +48,29 @@ class FriKodeApp {
   }
 
   _injectIcons() {
-    document.getElementById("wifiIcon").innerHTML = Icons.wifi;
-    document.getElementById("hostIconBadge").innerHTML = Icons.laptop;
-    document.getElementById("joinIconBadge").innerHTML = Icons.users;
-    document.getElementById("saveIcon").innerHTML = Icons.save;
-    document.getElementById("activityIcon").innerHTML = Icons.activity;
-    document.getElementById("newFileIcon").innerHTML = Icons.plus;
-    document.getElementById("newFolderIcon").innerHTML = Icons.folder;
-    document.getElementById("refreshIcon").innerHTML = Icons.refresh;
-    document.getElementById("modalHostIcon").innerHTML = Icons.laptop;
-    document.getElementById("modalJoinIcon").innerHTML = Icons.users;
-    document.getElementById("modalCopyIcon").innerHTML = Icons.copy;
-    document.getElementById("modalCopyCodeIcon").innerHTML = Icons.copy;
-    document.getElementById("topbarCopyIcon").innerHTML = Icons.copy;
-    document.getElementById("closeActivityIcon").innerHTML = Icons.close;
+    const setIcon = (id, iconSvg) => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = iconSvg;
+    };
+    setIcon("wifiIcon", Icons.wifi);
+    setIcon("hostIconBadge", Icons.laptop);
+    setIcon("joinIconBadge", Icons.users);
+    setIcon("saveIcon", Icons.save);
+    setIcon("activityIcon", Icons.activity);
+    setIcon("newFileIcon", Icons.plus);
+    setIcon("newFolderIcon", Icons.folder);
+    setIcon("refreshIcon", Icons.refresh);
+    setIcon("modalHostIcon", Icons.laptop);
+    setIcon("modalJoinIcon", Icons.users);
+    setIcon("modalCopyIcon", Icons.copy);
+    setIcon("modalCopyCodeIcon", Icons.copy);
+    setIcon("topbarCopyIcon", Icons.copy);
+    setIcon("closeActivityIcon", Icons.close);
   }
 
   _initColorSwatches() {
     const container = document.getElementById("colorSwatches");
+    if (!container) return;
     container.innerHTML = "";
     ACCENT_COLORS.forEach(color => {
       const swatch = document.createElement("div");
@@ -87,25 +92,30 @@ class FriKodeApp {
   _initEditor() {
     this.editorManager = new EditorManager({
       onCursorChange: ({ line, col }) => {
-        document.getElementById("statusCursorPos").textContent = `Ln ${line}, Col ${col}`;
+        const posEl = document.getElementById("statusCursorPos");
+        if (posEl) posEl.textContent = `Ln ${line}, Col ${col}`;
       },
       onSaveStateChange: (state) => {
         const dot = document.getElementById("syncStatusDot");
         const text = document.getElementById("syncStatusText");
-        dot.className = `sync-dot ${state}`;
-        if (state === "synced") text.textContent = "Synced";
-        else if (state === "saving") text.textContent = "Saving...";
-        else if (state === "unsaved") text.textContent = "Unsaved";
-        else if (state === "error") text.textContent = "Save Error";
+        if (dot) dot.className = `sync-dot ${state}`;
+        if (text) {
+          if (state === "synced") text.textContent = "Synced";
+          else if (state === "saving") text.textContent = "Saving...";
+          else if (state === "unsaved") text.textContent = "Unsaved";
+          else if (state === "error") text.textContent = "Save Error";
+        }
       },
       onTabChange: (tabInfo) => {
         const langEl = document.getElementById("statusLanguage");
-        if (tabInfo) {
-          langEl.textContent = tabInfo.mode.toUpperCase();
-          this._notifyFileFocus(tabInfo.path);
-        } else {
-          langEl.textContent = "Plain Text";
-          this._notifyFileFocus(null);
+        if (langEl) {
+          if (tabInfo) {
+            langEl.textContent = tabInfo.mode.toUpperCase();
+            this._notifyFileFocus(tabInfo.path);
+          } else {
+            langEl.textContent = "Plain Text";
+            this._notifyFileFocus(null);
+          }
         }
       }
     });
@@ -114,29 +124,38 @@ class FriKodeApp {
   }
 
   _bindEvents() {
-    // Home Action Cards
-    document.getElementById("btnHostCard").onclick = () => this.openHostModal();
-    document.getElementById("btnOpenHostModal").onclick = (e) => { e.stopPropagation(); this.openHostModal(); };
-    document.getElementById("btnJoinCard").onclick = () => this.openJoinModal();
-    document.getElementById("btnOpenJoinModal").onclick = (e) => { e.stopPropagation(); this.openJoinModal(); };
+    const bindClick = (id, handler) => {
+      const el = document.getElementById(id);
+      if (el) el.onclick = handler;
+    };
+
+    // Landing Header Navigation Buttons
+    bindClick("btnNavHost", () => this.openHostModal());
+    bindClick("btnNavJoin", () => this.openJoinModal());
+
+    // Home Hero Action Buttons
+    bindClick("btnHostCard", () => this.openHostModal());
+    bindClick("btnOpenHostModal", (e) => { e.stopPropagation(); this.openHostModal(); });
+    bindClick("btnJoinCard", () => this.openJoinModal());
+    bindClick("btnOpenJoinModal", (e) => { e.stopPropagation(); this.openJoinModal(); });
 
     // Host Modal
-    document.getElementById("btnCloseHostModal").onclick = () => this.closeModal("hostModal");
-    document.getElementById("btnCancelHost").onclick = () => this.closeModal("hostModal");
-    document.getElementById("btnConfirmHost").onclick = () => this.confirmHost();
-    document.getElementById("btnCopyModalAddress").onclick = () => {
-      const addr = document.getElementById("modalHostWifiAddress").textContent;
+    bindClick("btnCloseHostModal", () => this.closeModal("hostModal"));
+    bindClick("btnCancelHost", () => this.closeModal("hostModal"));
+    bindClick("btnConfirmHost", () => this.confirmHost());
+    bindClick("btnCopyModalAddress", () => {
+      const addr = document.getElementById("modalHostWifiAddress")?.textContent || "";
       copyToClipboard(addr, "Wi-Fi address copied!");
-    };
-    document.getElementById("btnCopyModalCode").onclick = () => {
-      const code = document.getElementById("modalHostSessionCode").textContent;
+    });
+    bindClick("btnCopyModalCode", () => {
+      const code = document.getElementById("modalHostSessionCode")?.textContent || "";
       copyToClipboard(code, "Session code copied!");
-    };
+    });
 
     // Join Modal
-    document.getElementById("btnCloseJoinModal").onclick = () => this.closeModal("joinModal");
-    document.getElementById("btnTestJoinConnection").onclick = () => this.testJoinPing();
-    document.getElementById("btnConfirmJoin").onclick = () => this.confirmJoin();
+    bindClick("btnCloseJoinModal", () => this.closeModal("joinModal"));
+    bindClick("btnTestJoinConnection", () => this.testJoinPing());
+    bindClick("btnConfirmJoin", () => this.confirmJoin());
 
     // Top Bar Actions
     document.getElementById("btnCopyInvite").onclick = () => {
