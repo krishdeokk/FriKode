@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: frikode
+    runtime: docker
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: WORKSPACE_DIR
+        value: sample_project
+    healthCheckPath: /api/ping
+

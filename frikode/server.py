@@ -57,9 +57,10 @@ class AiohttpWebsocketAdapter:
 
 
 class FriKodeServer:
-    def __init__(self, workspace_path: str, host: str = "0.0.0.0", port: int = 4000):
+    def __init__(self, workspace_path: str, host: str = "0.0.0.0", port: int = 4000, public_url: Optional[str] = None):
         self.host = host
         self.port = port
+        self.public_url = public_url or os.environ.get("PUBLIC_URL") or os.environ.get("APP_URL")
         self.workspace = Workspace(workspace_path)
         self.session_code = generate_session_code()
         self.is_running = False
@@ -120,11 +121,21 @@ class FriKodeServer:
     async def handle_get_session(self, request: web.Request) -> web.Response:
         ips = get_local_ip_addresses()
         primary_ip = get_primary_ip()
+
+        # Determine public URL (from tunnel, env var, or forwarded headers)
+        resolved_public_url = self.public_url
+        if not resolved_public_url:
+            forwarded_proto = request.headers.get("X-Forwarded-Proto")
+            forwarded_host = request.headers.get("X-Forwarded-Host")
+            if forwarded_proto and forwarded_host:
+                resolved_public_url = f"{forwarded_proto}://{forwarded_host}"
+
         return web.json_response({
             "session_code": self.session_code,
             "primary_ip": primary_ip,
             "ips": ips,
             "port": self.port,
+            "public_url": resolved_public_url,
             "workspace_name": self.workspace.name,
             "workspace_path": self.workspace.root_path,
             "peer_count": len(self.peers),
@@ -510,14 +521,19 @@ class FriKodeServer:
 
             primary_ip = get_primary_ip()
             print("=" * 64)
-            print("  FriKode • Local Network Collaborative Code Editor")
+            print("  FriKode • Collaborative Code Editor")
             print("=" * 64)
             print(f"  • Local Host:      http://localhost:{self.port}")
+            if self.public_url:
+                print(f"  • Public / Remote: {self.public_url}")
             print(f"  • Wi-Fi Address:   http://{primary_ip}:{self.port}")
             print(f"  • Session Code:    {self.session_code}")
             print(f"  • Workspace:       {self.workspace.root_path}")
             print("=" * 64)
-            print("  Share the Wi-Fi address or session code with peers on the same Wi-Fi.")
+            if self.public_url:
+                print("  Share the Public Link with peers anywhere on any network.")
+            else:
+                print("  Share the Wi-Fi address or session code with peers on the same Wi-Fi.")
             print("  Keep this process running to maintain the collaborative session.")
             print("=" * 64)
 
@@ -532,10 +548,30 @@ class FriKodeServer:
                 await runner.cleanup()
 
 
-def run_server(workspace_path: str = "sample_project", host: str = "0.0.0.0", port: int = 4000):
-    server = FriKodeServer(workspace_path=workspace_path, host=host, port=port)
+def run_server(
+    workspace_path: str = "sample_project",
+    host: str = "0.0.0.0",
+    port: int = 4000,
+    public_tunnel: bool = False,
+    public_url: Optional[str] = None
+):
+    tunnel = None
+    if public_tunnel and not public_url:
+        from .tunnel import CloudflareTunnel
+        tunnel = CloudflareTunnel(port=port)
+        public_url = tunnel.start()
+
+    server = FriKodeServer(
+        workspace_path=workspace_path,
+        host=host,
+        port=port,
+        public_url=public_url
+    )
     try:
         asyncio.run(server.start())
     except KeyboardInterrupt:
         print("\n[FriKode] Session stopped by user.")
+    finally:
+        if tunnel:
+            tunnel.stop()
 

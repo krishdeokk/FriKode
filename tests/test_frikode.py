@@ -182,6 +182,25 @@ class TestFriKodeServerIntegration(unittest.IsolatedAsyncioTestCase):
             focused = [p["active_file"] for p in msg2["peers"] if p["id"] == "peer_1"]
             self.assertEqual(focused[0], "main.py")
 
+    async def test_public_url_forwarded_headers(self):
+        headers = {
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Host": "frikode-demo.koyeb.app"
+        }
+        async with self.session.get(f"{self.base_url}/api/session", headers=headers) as res:
+            self.assertEqual(res.status, 200)
+            data = await res.json()
+            self.assertEqual(data.get("public_url"), "https://frikode-demo.koyeb.app")
+
+
+class TestTunnelManager(unittest.TestCase):
+    def test_tunnel_availability(self):
+        from frikode.tunnel import CloudflareTunnel
+        tunnel = CloudflareTunnel(port=4000)
+        self.assertIsInstance(CloudflareTunnel.is_available(), bool)
+        self.assertEqual(tunnel.port, 4000)
+        self.assertIsNone(tunnel.public_url)
+
 
 if __name__ == "__main__":
     unittest.main()

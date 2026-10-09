@@ -470,8 +470,17 @@
 
           <!-- Network Info Review -->
           <div class="network-info-card">
-            <div class="network-field">
-              <span class="network-field-label">Wi-Fi Address</span>
+            <div class="network-field" id="modalHostPublicRow" style="display: none;">
+              <span class="network-field-label">Remote Link (Anywhere)</span>
+              <div class="network-field-value">
+                <span id="modalHostPublicAddress">Scanning...</span>
+                <button class="copy-mini-btn" id="btnCopyModalPublicAddress" title="Copy Remote Link">
+                  <span id="modalCopyPublicIcon"></span>
+                </button>
+              </div>
+            </div>
+            <div class="network-field" id="modalHostWifiRow">
+              <span class="network-field-label">Wi-Fi Address (LAN)</span>
               <div class="network-field-value">
                 <span id="modalHostWifiAddress">Scanning...</span>
                 <button class="copy-mini-btn" id="btnCopyModalAddress" title="Copy Address">
@@ -518,12 +527,16 @@
           <button class="modal-close-btn" id="btnCloseJoinModal">✕</button>
         </div>
         <div class="modal-body">
+          <div id="joinRemoteHelper" style="display: none; margin-bottom: 14px; background: rgba(34, 211, 238, 0.08); border: 1.5px solid rgba(34, 211, 238, 0.25); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: #7dd3fc; line-height: 1.4;">
+            <span>🌐 Connected to hosted FriKode server at <strong id="joinRemoteHostLabel"></strong>. Address filled below automatically!</span>
+          </div>
+
           <div class="form-group">
             <label class="form-label" for="joinHostInput">
-              Host Address or Code
+              Host Address or Remote Link
             </label>
-            <input type="text" class="form-input mono" id="joinHostInput" placeholder="e.g. 192.168.1.105:4000 or http://...">
-            <span class="form-help">Ask the session host for the Wi-Fi address shown on their screen.</span>
+            <input type="text" class="form-input mono" id="joinHostInput" placeholder="e.g. https://... or 192.168.1.105:4000">
+            <span class="form-help">Enter the Wi-Fi address, public remote link, or cloud URL provided by the host.</span>
           </div>
 
           <div class="form-group">

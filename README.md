@@ -110,7 +110,30 @@ One laptop acts as the **Host**, serving the project workspace directly from the
 
 ---
 
-## 5. Main Features & Current Limitations
+---
+
+## 5. Coding from Anywhere (Remote & Cloud Deployment)
+
+FriKode supports working across different networks, mobile hotspots, and remote locations with **zero hosting cost**:
+
+### Method 1: Instant Free Public Tunnel (No Install / No Port-Forwarding)
+Run FriKode locally with the `--public` flag to generate a secure Cloudflare tunnel link:
+```bash
+python3 run.py --public
+```
+The terminal outputs a public HTTPS link (e.g., `https://random-words.trycloudflare.com`). Anyone with this link can collaborate with you from any network in the world.
+
+### Method 2: Deploy Free on the Cloud (Koyeb, Render, Fly.io)
+FriKode includes a production-ready `Dockerfile` and `render.yaml`:
+1. Push your FriKode repo to GitHub.
+2. **Koyeb / Render**: Link your GitHub repository.
+   - On **Render**: It will automatically detect `render.yaml` and deploy on the free Web Service tier.
+   - On **Koyeb**: Create a free Web Service from your repository with Dockerfile runtime.
+3. Your team can visit your public domain (e.g. `https://your-frikode.koyeb.app`) from anywhere.
+
+---
+
+## 6. Main Features & Current Limitations
 
 ### Implemented Features
 - **Deterministic CRDT Synchronization**: Real-time concurrent typing without overwriting teammate edits.
@@ -124,10 +147,10 @@ One laptop acts as the **Host**, serving the project workspace directly from the
   - Multi-file tabs with dirty state indicators (`•`) and close buttons.
   - Safe file persistence directly to the host machine's disk.
   - Manual Save (`Cmd/Ctrl+S`) and debounced auto-save.
-- **Local Network Discovery & Status**:
-  - Automatic detection of local Wi-Fi IPv4 address.
+- **Local Network & Remote Discovery**:
+  - Automatic detection of local Wi-Fi IPv4 address and remote public links.
   - Generated session code (`FRI-XXXX`) and one-click copy buttons.
-  - Real-time Wi-Fi RTT latency monitor.
+  - Real-time Wi-Fi and remote RTT latency monitor.
   - Reconnection banner when network connectivity drops.
   - Host session termination notice.
 - **High-End Developer Tool UI**:
@@ -136,30 +159,29 @@ One laptop acts as the **Host**, serving the project workspace directly from the
   - Responsive layout optimized for laptops and tablets.
 
 ### Current Limitations
-- **Local Network Scope**: Requires all machines to share the same subnet or router. Devices on isolated guest Wi-Fi networks (with AP client isolation enabled) cannot discover peer ports unless AP isolation is disabled.
 - **Single Workspace Root**: FriKode shares one designated project folder at a time.
-- **Host Process Dependency**: The host laptop must stay awake; if the host sleeps or closes their lid, active WebSocket connections pause until the host wakes up.
+- **Host Process Dependency (when self-hosting)**: The host laptop must stay awake; if the host sleeps or closes their lid, active WebSocket connections pause until the host wakes up.
 
 ---
 
-## 6. Security & Trust Boundaries
+## 7. Security & Trust Boundaries
 
 > [!IMPORTANT]
-> **No Cloud Exposure**: FriKode does not transmit code, keystrokes, telemetry, or metadata to external third-party cloud services. All communication remains strictly on your local Wi-Fi subnet.
+> **No Cloud Telemetry**: When running locally on Wi-Fi, FriKode does not transmit code, keystrokes, telemetry, or metadata to external third-party cloud services.
 
 - **Workspace File Jail**: Every filesystem request undergoes canonical path resolution (`os.path.realpath`) against the workspace root. Any attempt to access files outside the workspace (such as `../../etc/passwd` or `~/.ssh`) is blocked with an HTTP 403 Forbidden error.
-- **Local Network Trust Model**: FriKode is designed for trusted teammates working together in the same physical space. Traffic is transmitted over standard local HTTP/WS on the Wi-Fi network. Do not run FriKode with port forwarding exposed to the public internet without putting it behind a reverse proxy with TLS/SSL authentication.
+- **Local Network Trust Model**: FriKode is designed for teammates working together. Traffic is transmitted over standard local HTTP/WS on Wi-Fi, or HTTPS/WSS when deployed through cloud/tunnel providers.
 - **Host Control**: The host machine owns the filesystem and has the authority to terminate the session, which safely disconnects all participants and saves the final file state on the host's disk.
 
 ---
 
-## 7. Automated Test Suite
+## 8. Automated Test Suite
 
-FriKode includes a full integration test suite verifying workspace jail containment, network utilities, REST API endpoints, and WebSocket signaling:
+FriKode includes a full integration test suite verifying workspace jail containment, network utilities, REST API endpoints, public remote sessions, and WebSocket signaling:
 
 ```bash
 source .venv/bin/activate
 python -m unittest tests/test_frikode.py
 ```
-*(All 9 tests pass in under 0.1 seconds).*
+*(All 11 tests pass in under 0.1 seconds).*
 

@@ -45,6 +45,16 @@ class FriKodeApp {
     } catch (err) {
       console.warn("Could not reach local session API immediately:", err);
     }
+
+    // Check URL parameters for 1-click invite (?join=1 or ?code=FRI-XXXX)
+    const urlParams = new URLSearchParams(window.location.search);
+    const codeParam = urlParams.get("code") || urlParams.get("session");
+    const joinParam = urlParams.get("join");
+    if (codeParam || joinParam) {
+      setTimeout(() => {
+        this.openJoinModal();
+      }, 300);
+    }
   }
 
   _injectIcons() {
@@ -64,6 +74,7 @@ class FriKodeApp {
     setIcon("modalJoinIcon", Icons.users);
     setIcon("modalCopyIcon", Icons.copy);
     setIcon("modalCopyCodeIcon", Icons.copy);
+    setIcon("modalCopyPublicIcon", Icons.copy);
     setIcon("topbarCopyIcon", Icons.copy);
     setIcon("closeActivityIcon", Icons.close);
     setIcon("modalProfileIcon", Icons.users);
@@ -165,6 +176,10 @@ class FriKodeApp {
     bindClick("btnCopyModalCode", () => {
       const code = document.getElementById("modalHostSessionCode")?.textContent || "";
       copyToClipboard(code, "Session code copied!");
+    });
+    bindClick("btnCopyModalPublicAddress", () => {
+      const addr = document.getElementById("modalHostPublicAddress")?.textContent || "";
+      copyToClipboard(addr, "Remote link copied!");
     });
 
     // Join Modal
@@ -323,6 +338,22 @@ class FriKodeApp {
     const nameInput = document.getElementById("joinNameInput");
     nameInput.value = localStorage.getItem("frikode_name") || "";
     document.getElementById("joinFeedbackBox").style.display = "none";
+
+    const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+    const remoteUrl = this.session?.public_url || (isRemote ? window.location.origin : "");
+    const helper = document.getElementById("joinRemoteHelper");
+    const label = document.getElementById("joinRemoteHostLabel");
+
+    if (remoteUrl) {
+      document.getElementById("joinHostInput").value = remoteUrl;
+      if (helper && label) {
+        helper.style.display = "block";
+        label.textContent = remoteUrl;
+      }
+    } else if (helper) {
+      helper.style.display = "none";
+    }
+
     this.openModal("joinModal");
   }
 
@@ -334,7 +365,7 @@ class FriKodeApp {
     if (!hostInput) {
       feedback.style.background = "rgba(244, 63, 94, 0.15)";
       feedback.style.color = "#fda4af";
-      feedback.textContent = "Please enter the host Wi-Fi address (e.g. 192.168.1.105:4000).";
+      feedback.textContent = "Please enter the host Wi-Fi address or public link.";
       return;
     }
 
@@ -345,13 +376,15 @@ class FriKodeApp {
 
     try {
       const pingRes = await api.ping(normalizedUrl);
+      const isRemotePing = !normalizedUrl.includes("127.0.0.1") && !normalizedUrl.includes("localhost") && !normalizedUrl.includes("192.168.");
+      const label = isRemotePing ? "Remote Ping" : "Local Ping";
       feedback.style.background = "rgba(16, 185, 129, 0.15)";
       feedback.style.color = "#6ee7b7";
-      feedback.textContent = `✓ Reachable! Local Wi-Fi Ping: ${pingRes.rtt}ms • Project: "${pingRes.workspace_name}"`;
+      feedback.textContent = `✓ Reachable! ${label}: ${pingRes.rtt}ms • Project: "${pingRes.workspace_name}"`;
     } catch (err) {
       feedback.style.background = "rgba(244, 63, 94, 0.15)";
       feedback.style.color = "#fda4af";
-      feedback.textContent = `✕ Could not reach host at ${normalizedUrl}. Ensure both devices are on the same Wi-Fi.`;
+      feedback.textContent = `✕ Could not reach host at ${normalizedUrl}. Check your internet connection or URL.`;
     }
   }
 
@@ -999,15 +1032,30 @@ class FriKodeApp {
     if (!this.session) return;
     const ip = this.session.primary_ip || "127.0.0.1";
     const port = this.session.port || 4000;
-    const fullUrl = `http://${ip}:${port}`;
+    const fullWifiUrl = `http://${ip}:${port}`;
+    const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+    const publicUrl = this.session.public_url || (isRemote ? window.location.origin : null);
 
-    document.getElementById("homeLocalIpBadge").textContent = `Wi-Fi Address: ${fullUrl}`;
-    document.getElementById("modalHostWifiAddress").textContent = fullUrl;
+    if (publicUrl) {
+      document.getElementById("homeLocalIpBadge").textContent = `Remote Link: ${publicUrl}`;
+      const publicRow = document.getElementById("modalHostPublicRow");
+      if (publicRow) {
+        publicRow.style.display = "flex";
+        document.getElementById("modalHostPublicAddress").textContent = publicUrl;
+      }
+    } else {
+      document.getElementById("homeLocalIpBadge").textContent = `Wi-Fi Address: ${fullWifiUrl}`;
+    }
+
+    document.getElementById("modalHostWifiAddress").textContent = fullWifiUrl;
     document.getElementById("modalHostSessionCode").textContent = this.session.session_code || "FRI-....";
   }
 
   _getInviteUrl() {
     if (!this.session) return window.location.origin;
+    if (this.session.public_url) return this.session.public_url;
+    const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+    if (isRemote) return window.location.origin;
     const ip = this.session.primary_ip || window.location.hostname;
     const port = this.session.port || window.location.port || 4000;
     return `http://${ip}:${port}`;
@@ -1016,10 +1064,10 @@ class FriKodeApp {
   _normalizeAddress(raw) {
     let cleaned = raw.trim();
     if (!cleaned.startsWith("http://") && !cleaned.startsWith("https://")) {
-      if (cleaned.includes(":")) {
-        cleaned = `http://${cleaned}`;
+      if (cleaned.includes(":") || cleaned.includes("localhost") || /^(\d{1,3}\.){3}\d{1,3}/.test(cleaned)) {
+        cleaned = cleaned.includes(":") ? `http://${cleaned}` : `http://${cleaned}:4000`;
       } else {
-        cleaned = `http://${cleaned}:4000`;
+        cleaned = `https://${cleaned}`;
       }
     }
     return cleaned.replace(/\/$/, "");
@@ -1030,9 +1078,11 @@ class FriKodeApp {
     this.pingInterval = setInterval(async () => {
       try {
         const ping = await api.ping();
-        document.getElementById("statusPingText").textContent = `Local Wi-Fi • Ping: ${ping.rtt}ms`;
+        const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+        const label = (this.session?.public_url || isRemote) ? "Remote / Cloud" : "Local Wi-Fi";
+        document.getElementById("statusPingText").textContent = `${label} • Ping: ${ping.rtt}ms`;
       } catch (_) {
-        document.getElementById("statusPingText").textContent = `Local Wi-Fi • Disconnected`;
+        document.getElementById("statusPingText").textContent = `Disconnected`;
       }
     }, 10000);
   }
