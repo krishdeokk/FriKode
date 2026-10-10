@@ -48,6 +48,31 @@ export class EditorManager {
   }
 
   _initCodeMirror() {
+    if (this.cm) return true;
+    if (typeof window.CodeMirror !== "function") {
+      console.warn("[FriKode] CodeMirror not ready on window yet; waiting...");
+      if (!this._cmPoll) {
+        let attempts = 0;
+        this._cmPoll = setInterval(() => {
+          attempts++;
+          if (typeof window.CodeMirror === "function") {
+            clearInterval(this._cmPoll);
+            this._cmPoll = null;
+            this._initCodeMirror();
+            if (this.activePath) {
+              const p = this.activePath;
+              this.activePath = null;
+              this.switchTab(p);
+            }
+          } else if (attempts > 60) {
+            clearInterval(this._cmPoll);
+            this._cmPoll = null;
+          }
+        }, 100);
+      }
+      return false;
+    }
+
     this.cm = window.CodeMirror(this.container, {
       lineNumbers: true,
       theme: "frikode",
@@ -124,10 +149,16 @@ export class EditorManager {
     const ydoc = new Y.Doc();
     const ytext = ydoc.getText("content");
 
-    // Establish WebSocket provider to local server room
-    const host = window.location.host;
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const roomPath = encodeURIComponent(path);
+    // Establish WebSocket provider to server room
+    let host = window.location.host;
+    let protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    if (api.baseUrl) {
+      try {
+        const parsed = new URL(api.baseUrl);
+        host = parsed.host;
+        protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+      } catch (_) {}
+    }
     const wsUrl = `${protocol}//${host}/ws/yjs`;
 
     const provider = new WebsocketProvider(wsUrl, path, ydoc, { connect: true });
@@ -168,6 +199,11 @@ export class EditorManager {
     }
 
     this.activePath = path;
+
+    if (!this.cm) {
+      this._initCodeMirror();
+      if (!this.cm) return;
+    }
 
     // Show CodeMirror, hide empty state
     this.emptyState.style.display = "none";

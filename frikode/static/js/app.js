@@ -6,7 +6,7 @@
 import { api } from "./api.js";
 import { EditorManager } from "./editor.js";
 import { Icons, getFileIcon } from "./icons.js";
-import { ACCENT_COLORS, getRandomColor, copyToClipboard, showToast, formatTime } from "./utils.js";
+import { ACCENT_COLORS, getRandomColor, copyToClipboard, showToast, formatTime, safeGetStorage, safeSetStorage } from "./utils.js";
 
 class FriKodeApp {
   constructor() {
@@ -14,8 +14,8 @@ class FriKodeApp {
     this.role = "host"; // "host" or "participant"
     this.user = {
       id: "user_" + Math.random().toString(36).substring(2, 9),
-      name: localStorage.getItem("frikode_name") || "Developer",
-      color: localStorage.getItem("frikode_color") || getRandomColor()
+      name: safeGetStorage("frikode_name", "Developer"),
+      color: safeGetStorage("frikode_color", getRandomColor())
     };
 
     this.editorManager = null;
@@ -92,7 +92,7 @@ class FriKodeApp {
         container.querySelectorAll(".color-swatch").forEach(s => s.classList.remove("selected"));
         swatch.classList.add("selected");
         this.user.color = color;
-        localStorage.setItem("frikode_color", color);
+        safeSetStorage("frikode_color", color);
         if (this.editorManager) {
           this.editorManager.setUser(this.user.name, this.user.color);
         }
@@ -298,7 +298,7 @@ class FriKodeApp {
   async openHostModal() {
     const nameInput = document.getElementById("hostNameInput");
     if (nameInput) {
-      nameInput.value = localStorage.getItem("frikode_name") || this.user.name || "Developer";
+      nameInput.value = safeGetStorage("frikode_name", this.user.name || "Developer");
     }
     this._initColorSwatches("hostColorSwatches");
     try {
@@ -311,24 +311,42 @@ class FriKodeApp {
   }
 
   async confirmHost() {
-    const workspaceInput = document.getElementById("hostWorkspaceInput").value.trim() || "sample_project";
-    const hostName = document.getElementById("hostNameInput")?.value.trim() || localStorage.getItem("frikode_name") || "Developer";
-    this.user.name = hostName;
-    localStorage.setItem("frikode_name", hostName);
-
-    try {
-      const res = await api.createSession(workspaceInput, false);
-      this.session.session_code = res.session_code;
-      this.session.workspace_name = res.workspace_name;
-    } catch (err) {
-      console.error("Failed to reinitialize workspace:", err);
+    const btn = document.getElementById("btnConfirmHost");
+    const origHtml = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span>Starting...</span>`;
     }
 
-    this.role = "host";
-    this.editorManager.setUser(this.user.name, this.user.color);
+    try {
+      const workspaceInput = document.getElementById("hostWorkspaceInput")?.value?.trim() || "sample_project";
+      const hostName = document.getElementById("hostNameInput")?.value?.trim() || safeGetStorage("frikode_name", "Developer");
+      this.user.name = hostName;
+      safeSetStorage("frikode_name", hostName);
 
-    this.closeModal("hostModal");
-    this.enterWorkspace();
+      try {
+        const res = await api.createSession(workspaceInput, false);
+        if (!this.session) this.session = {};
+        this.session.session_code = res.session_code;
+        this.session.workspace_name = res.workspace_name;
+      } catch (err) {
+        console.error("Failed to reinitialize workspace:", err);
+      }
+
+      this.role = "host";
+      this.editorManager?.setUser(this.user.name, this.user.color);
+
+      this.closeModal("hostModal");
+      await this.enterWorkspace();
+    } catch (err) {
+      console.error("Error starting host session:", err);
+      showToast("Error starting session: " + (err.message || err), "error");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
   }
 
   // -------------------------------------------------------------
@@ -336,85 +354,132 @@ class FriKodeApp {
   // -------------------------------------------------------------
   openJoinModal() {
     const nameInput = document.getElementById("joinNameInput");
-    nameInput.value = localStorage.getItem("frikode_name") || "";
+    if (nameInput) {
+      nameInput.value = safeGetStorage("frikode_name", "");
+    }
     document.getElementById("joinFeedbackBox").style.display = "none";
 
     const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
-    const remoteUrl = this.session?.public_url || (isRemote ? window.location.origin : "");
     const helper = document.getElementById("joinRemoteHelper");
     const label = document.getElementById("joinRemoteHostLabel");
+    const hostInput = document.getElementById("joinHostInput");
 
-    if (remoteUrl) {
-      document.getElementById("joinHostInput").value = remoteUrl;
+    // Pre-fill active session code or remote link
+    if (this.session?.session_code) {
+      hostInput.value = this.session.session_code;
       if (helper && label) {
         helper.style.display = "block";
-        label.textContent = remoteUrl;
+        const code = this.session.session_code;
+        const wsName = this.session.workspace_name || "Workspace";
+        label.textContent = `${code} (${wsName})`;
+      }
+    } else if (isRemote) {
+      hostInput.value = window.location.origin;
+      if (helper && label) {
+        helper.style.display = "block";
+        label.textContent = window.location.origin;
       }
     } else if (helper) {
       helper.style.display = "none";
     }
 
     this.openModal("joinModal");
+    setTimeout(() => {
+      if (nameInput) nameInput.focus();
+    }, 150);
   }
 
   async testJoinPing() {
-    const hostInput = document.getElementById("joinHostInput").value.trim();
+    const rawInput = document.getElementById("joinHostInput").value.trim();
     const feedback = document.getElementById("joinFeedbackBox");
     feedback.style.display = "block";
 
-    if (!hostInput) {
-      feedback.style.background = "rgba(244, 63, 94, 0.15)";
-      feedback.style.color = "#fda4af";
-      feedback.textContent = "Please enter the host Wi-Fi address or public link.";
-      return;
+    const isCode = !rawInput || (/^(FRI-)?[A-Za-z0-9]{4,8}$/i.test(rawInput) && !rawInput.includes(".") && !rawInput.includes(":") && !rawInput.includes("/"));
+    let targetUrl;
+
+    if (isCode) {
+      targetUrl = window.location.origin;
+    } else {
+      targetUrl = this._normalizeAddress(rawInput);
     }
 
-    const normalizedUrl = this._normalizeAddress(hostInput);
     feedback.style.background = "rgba(34, 211, 238, 0.1)";
     feedback.style.color = "#7dd3fc";
-    feedback.textContent = `Testing connection to ${normalizedUrl}...`;
+    feedback.textContent = `Testing connection to ${targetUrl}...`;
 
     try {
-      const pingRes = await api.ping(normalizedUrl);
-      const isRemotePing = !normalizedUrl.includes("127.0.0.1") && !normalizedUrl.includes("localhost") && !normalizedUrl.includes("192.168.");
+      const pingRes = await api.ping(targetUrl);
+      const isRemotePing = !targetUrl.includes("127.0.0.1") && !targetUrl.includes("localhost") && !targetUrl.includes("192.168.");
       const label = isRemotePing ? "Remote Ping" : "Local Ping";
       feedback.style.background = "rgba(16, 185, 129, 0.15)";
       feedback.style.color = "#6ee7b7";
-      feedback.textContent = `✓ Reachable! ${label}: ${pingRes.rtt}ms • Project: "${pingRes.workspace_name}"`;
+      feedback.textContent = `✓ Reachable! ${label}: ${pingRes.rtt}ms • Project: "${pingRes.workspace_name}" (Code: ${pingRes.session_code})`;
     } catch (err) {
       feedback.style.background = "rgba(244, 63, 94, 0.15)";
       feedback.style.color = "#fda4af";
-      feedback.textContent = `✕ Could not reach host at ${normalizedUrl}. Check your internet connection or URL.`;
+      feedback.textContent = `✕ Could not reach host at ${targetUrl}. Check your URL or network connection.`;
     }
   }
 
   async confirmJoin() {
-    const hostInput = document.getElementById("joinHostInput").value.trim();
-    const nameInput = document.getElementById("joinNameInput").value.trim() || "Participant";
-
-    if (!hostInput) {
-      showToast("Please enter the host Wi-Fi address", "error");
-      return;
+    const btn = document.getElementById("btnConfirmJoin");
+    const origHtml = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span>Connecting...</span>`;
     }
-
-    const normalizedUrl = this._normalizeAddress(hostInput);
-    this.user.name = nameInput;
-    localStorage.setItem("frikode_name", nameInput);
-    this.role = "participant";
-
-    // Set API base URL to target host
-    api.setBaseUrl(normalizedUrl);
 
     try {
-      this.session = await api.getSession();
-    } catch (err) {
-      showToast(`Cannot connect to host at ${normalizedUrl}`, "error");
-      return;
-    }
+      const rawInput = document.getElementById("joinHostInput").value.trim();
+      const nameInput = document.getElementById("joinNameInput").value.trim() || "Participant";
 
-    this.editorManager.setUser(this.user.name, this.user.color);
-    this.closeModal("joinModal");
-    this.enterWorkspace();
+      const isCode = !rawInput || (/^(FRI-)?[A-Za-z0-9]{4,8}$/i.test(rawInput) && !rawInput.includes(".") && !rawInput.includes(":") && !rawInput.includes("/"));
+      let targetUrl;
+
+      if (isCode) {
+        targetUrl = window.location.origin;
+        if (rawInput && this.session?.session_code) {
+          const cleanEntered = rawInput.toUpperCase().replace(/^FRI-/, "");
+          const cleanActual = this.session.session_code.toUpperCase().replace(/^FRI-/, "");
+          if (cleanEntered !== cleanActual) {
+            showToast(`Session code "${rawInput.toUpperCase()}" does not match active session (${this.session.session_code})`, "error");
+            return;
+          }
+        }
+      } else {
+        targetUrl = this._normalizeAddress(rawInput);
+      }
+
+      this.user.name = nameInput;
+      safeSetStorage("frikode_name", nameInput);
+      this.role = "participant";
+
+      // If targetUrl is the current origin, use relative requests (empty baseUrl) to prevent CORS and URL issues
+      if (targetUrl === window.location.origin || targetUrl === "" || targetUrl === "/") {
+        api.setBaseUrl("");
+      } else {
+        api.setBaseUrl(targetUrl);
+      }
+
+      try {
+        this.session = await api.getSession();
+      } catch (err) {
+        showToast(`Cannot connect to host: ${err.message || targetUrl}`, "error");
+        return;
+      }
+
+      this.editorManager?.setUser(this.user.name, this.user.color);
+      this.closeModal("joinModal");
+      await this.enterWorkspace();
+    } catch (err) {
+      console.error("Error confirming join:", err);
+      showToast("Failed to join: " + (err.message || err), "error");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
   }
 
   // -------------------------------------------------------------
@@ -437,11 +502,19 @@ class FriKodeApp {
 
     this._updateUserProfileButton();
 
-    // Connect Signaling WebSocket
-    this._connectSignaling();
+    // Connect Signaling WebSocket safely
+    try {
+      this._connectSignaling();
+    } catch (wsErr) {
+      console.warn("Signaling initialization warning:", wsErr);
+    }
 
-    // Load workspace files
-    await this.loadFiles();
+    // Load workspace files safely
+    try {
+      await this.loadFiles();
+    } catch (fileErr) {
+      console.warn("Load files warning:", fileErr);
+    }
 
     // Start network health ping
     this._startPingMonitor();
@@ -594,10 +667,18 @@ class FriKodeApp {
       this.signalingWs.close();
     }
 
-    const baseHost = api.baseUrl ? new URL(api.baseUrl).host : window.location.host;
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${baseHost}/ws/collaboration`;
+    let baseHost = window.location.host;
+    let protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
+    if (api.baseUrl) {
+      try {
+        const parsed = new URL(api.baseUrl);
+        baseHost = parsed.host;
+        protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+      } catch (_) {}
+    }
+
+    const wsUrl = `${protocol}//${baseHost}/ws/collaboration`;
     this.signalingWs = new WebSocket(wsUrl);
 
     this.signalingWs.onopen = () => {
@@ -913,8 +994,8 @@ class FriKodeApp {
 
     this.user.name = newName;
     this.user.color = newColor;
-    localStorage.setItem("frikode_name", newName);
-    localStorage.setItem("frikode_color", newColor);
+    safeSetStorage("frikode_name", newName);
+    safeSetStorage("frikode_color", newColor);
 
     if (newRole && newRole !== this.role) {
       this.role = newRole;
@@ -1047,6 +1128,28 @@ class FriKodeApp {
       document.getElementById("homeLocalIpBadge").textContent = `Wi-Fi Address: ${fullWifiUrl}`;
     }
 
+    // If viewing via remote link or hosted domain, make Join the primary action
+    if (isRemote) {
+      const btnJoin = document.getElementById("btnOpenJoinModal");
+      if (btnJoin) {
+        const code = this.session?.session_code ? ` (${this.session.session_code})` : "";
+        btnJoin.innerHTML = `<span>Join Active Session${code}</span>`;
+        btnJoin.className = "mbot-btn mbot-btn-lime";
+      }
+      const btnHost = document.getElementById("btnOpenHostModal");
+      if (btnHost) {
+        btnHost.className = "mbot-btn mbot-btn-tan";
+      }
+      const btnNavJoin = document.getElementById("btnNavJoin");
+      if (btnNavJoin) {
+        btnNavJoin.className = "mbot-btn mbot-btn-lime";
+      }
+      const btnNavHost = document.getElementById("btnNavHost");
+      if (btnNavHost) {
+        btnNavHost.className = "mbot-btn mbot-btn-tan";
+      }
+    }
+
     document.getElementById("modalHostWifiAddress").textContent = fullWifiUrl;
     document.getElementById("modalHostSessionCode").textContent = this.session.session_code || "FRI-....";
   }
@@ -1062,7 +1165,16 @@ class FriKodeApp {
   }
 
   _normalizeAddress(raw) {
+    if (!raw) return window.location.origin;
     let cleaned = raw.trim();
+    if (!cleaned) return window.location.origin;
+
+    // Check if session code was entered (e.g. FRI-CDU9 or CDU9)
+    const isCode = /^(FRI-)?[A-Za-z0-9]{4,8}$/i.test(cleaned) && !cleaned.includes(".") && !cleaned.includes(":") && !cleaned.includes("/");
+    if (isCode) {
+      return window.location.origin;
+    }
+
     if (!cleaned.startsWith("http://") && !cleaned.startsWith("https://")) {
       if (cleaned.includes(":") || cleaned.includes("localhost") || /^(\d{1,3}\.){3}\d{1,3}/.test(cleaned)) {
         cleaned = cleaned.includes(":") ? `http://${cleaned}` : `http://${cleaned}:4000`;
@@ -1088,8 +1200,16 @@ class FriKodeApp {
   }
 }
 
-// Instantiate on DOM ready
-document.addEventListener("DOMContentLoaded", () => {
-  window.frikodeApp = new FriKodeApp();
-});
+// Instantiate on DOM ready or immediately if already loaded
+function initApp() {
+  if (!window.frikodeApp) {
+    window.frikodeApp = new FriKodeApp();
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}
 

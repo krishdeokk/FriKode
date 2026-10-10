@@ -79,3 +79,17 @@ export function formatTime(timestamp) {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+export function safeGetStorage(key, fallback = null) {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+export function safeSetStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (_) {}
+}
+

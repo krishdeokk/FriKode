@@ -75,8 +75,27 @@ class FriKodeServer:
         self.y_server = WebsocketServer(rooms_ready=True, auto_clean_rooms=False)
         self.initialized_rooms: Set[str] = set()
 
-        # aiohttp app
-        self.app = web.Application()
+        # aiohttp app with CORS support for remote and cross-origin access
+        @web.middleware
+        async def cors_middleware(request: web.Request, handler):
+            if request.method == "OPTIONS":
+                response = web.Response(status=204)
+            else:
+                try:
+                    response = await handler(request)
+                except web.HTTPException as ex:
+                    response = ex
+                except Exception as ex:
+                    logger.error(f"Unhandled error handling {request.path}: {ex}")
+                    response = web.json_response({"error": str(ex)}, status=500)
+
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+            response.headers["Access-Control-Max-Age"] = "86400"
+            return response
+
+        self.app = web.Application(middlewares=[cors_middleware])
         self._setup_routes()
 
     def _setup_routes(self):
@@ -517,7 +536,21 @@ class FriKodeServer:
         async with anyio.create_task_group() as tg:
             tg.start_soon(self.y_server.start)
             await self.y_server.started.wait()
-            await site.start()
+            try:
+                await site.start()
+            except OSError as e:
+                if e.errno in (48, 98):  # 48 on macOS, 98 on Linux (EADDRINUSE)
+                    print("\n" + "!" * 64)
+                    print(f"  [ERROR] Port {self.port} is already in use by another process!")
+                    print("!" * 64)
+                    print(f"  • To free port {self.port}, run:")
+                    print(f"      kill -9 $(lsof -t -i:{self.port})")
+                    print(f"  • Or run FriKode on a different port:")
+                    print(f"      ./run.sh --port {self.port + 1}")
+                    print("!" * 64 + "\n")
+                    tg.cancel_scope.cancel()
+                    return
+                raise
 
             primary_ip = get_primary_ip()
             print("=" * 64)
