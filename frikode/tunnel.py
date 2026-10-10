@@ -25,7 +25,58 @@ logger = logging.getLogger("frikode.tunnel")
 REGEX_CLOUDFLARE = re.compile(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com")
 REGEX_PINGGY = re.compile(r"https://[a-zA-Z0-9-]+\.(?:a\.|free\.)?pinggy\.link")
 REGEX_LOCALHOST_RUN = re.compile(r"https://[a-zA-Z0-9-]+\.lhr\.life")
-REGEX_GENERIC_HTTPS = re.compile(r"https://[a-zA-Z0-9.-]+(?::[0-9]+)?")
+def _get_or_create_ssh_key() -> Optional[str]:
+    """
+    Returns the path to an SSH private key. If no SSH key exists on the user's
+    machine (~/.ssh/), automatically generates a lightweight keypair in
+    ~/.frikode/tunnel_key or .frikode_keys/tunnel_key so that SSH tunneling
+    never prompts for an interactive password.
+    """
+    home = os.path.expanduser("~")
+    ssh_dir = os.path.join(home, ".ssh")
+    standard_keys = [
+        os.path.join(ssh_dir, "id_ed25519"),
+        os.path.join(ssh_dir, "id_rsa"),
+        os.path.join(ssh_dir, "id_ecdsa"),
+    ]
+    for key_path in standard_keys:
+        if os.path.isfile(key_path):
+            return key_path
+
+    # Check ~/.frikode/tunnel_key
+    frikode_user_dir = os.path.join(home, ".frikode")
+    frikode_user_key = os.path.join(frikode_user_dir, "tunnel_key")
+    if os.path.isfile(frikode_user_key):
+        return frikode_user_key
+
+    # Check workspace-local .frikode_keys/tunnel_key
+    local_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".frikode_keys"))
+    local_key = os.path.join(local_dir, "tunnel_key")
+    if os.path.isfile(local_key):
+        return local_key
+
+    # Generate an ed25519 key without passphrase
+    ssh_keygen = shutil.which("ssh-keygen")
+    if ssh_keygen:
+        for target_dir, target_key in [(frikode_user_dir, frikode_user_key), (local_dir, local_key)]:
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+                subprocess.run(
+                    [ssh_keygen, "-t", "ed25519", "-N", "", "-f", target_key, "-q"],
+                    capture_output=True,
+                    check=True,
+                    timeout=5,
+                )
+                try:
+                    os.chmod(target_key, 0o600)
+                except Exception:
+                    pass
+                if os.path.isfile(target_key):
+                    return target_key
+            except Exception as e:
+                logger.debug(f"Could not generate SSH key in {target_dir}: {e}")
+
+    return None
 
 
 class TunnelManager:
@@ -122,6 +173,7 @@ class TunnelManager:
             ssh_bin = shutil.which("ssh")
             if not ssh_bin:
                 return None
+            key_path = _get_or_create_ssh_key()
             # Pinggy over port 443 (HTTPS port) bypasses firewall blocks on port 22
             cmd = [
                 ssh_bin,
@@ -133,15 +185,19 @@ class TunnelManager:
                 "-o", "ServerAliveCountMax=3",
                 "-o", "ConnectTimeout=10",
                 "-o", "ExitOnForwardFailure=yes",
+                "-o", "BatchMode=yes",
                 "-T",
-                "a.pinggy.io",
             ]
+            if key_path:
+                cmd.extend(["-i", key_path])
+            cmd.append("a.pinggy.io")
             url_regex = REGEX_PINGGY
 
         elif provider == "localhost_run":
             ssh_bin = shutil.which("ssh")
             if not ssh_bin:
                 return None
+            key_path = _get_or_create_ssh_key()
             cmd = [
                 ssh_bin,
                 "-R", f"80:localhost:{self.port}",
@@ -151,9 +207,12 @@ class TunnelManager:
                 "-o", "ServerAliveCountMax=3",
                 "-o", "ConnectTimeout=10",
                 "-o", "ExitOnForwardFailure=yes",
+                "-o", "BatchMode=yes",
                 "-T",
-                "nokey@localhost.run",
             ]
+            if key_path:
+                cmd.extend(["-i", key_path])
+            cmd.append("nokey@localhost.run")
             url_regex = REGEX_LOCALHOST_RUN
 
         else:
@@ -162,6 +221,7 @@ class TunnelManager:
         try:
             proc = subprocess.Popen(
                 cmd,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,

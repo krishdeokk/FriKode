@@ -4,4 +4,6 @@ __pycache__/
 *.pyc
 .DS_Store
 *.tmp.*
+.frikode_keys/
+*.key
 
