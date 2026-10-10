@@ -120,6 +120,39 @@ export class FriKodeApi {
     const rtt = Math.round(performance.now() - start);
     return { ...data, rtt };
   }
+
+  async getTunnel() {
+    return this._fetch("/api/tunnel");
+  }
+
+  async startTunnel(provider = "auto") {
+    return this._fetch("/api/tunnel", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "start",
+        provider
+      })
+    });
+  }
+
+  async stopTunnel() {
+    return this._fetch("/api/tunnel", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "stop"
+      })
+    });
+  }
+
+  async setCustomTunnelUrl(url) {
+    return this._fetch("/api/tunnel", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "set_url",
+        url
+      })
+    });
+  }
 }
 
 export const api = new FriKodeApi();

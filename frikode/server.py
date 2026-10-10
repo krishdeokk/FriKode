@@ -18,6 +18,7 @@ from ypy_websocket import WebsocketServer
 import y_py as Y
 
 from .network import get_local_ip_addresses, get_primary_ip, generate_session_code
+from .tunnel import get_tunnel_manager
 from .workspace import Workspace, WorkspaceSecurityError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -61,6 +62,10 @@ class FriKodeServer:
         self.host = host
         self.port = port
         self.public_url = public_url or os.environ.get("PUBLIC_URL") or os.environ.get("APP_URL")
+        self.tunnel_manager = get_tunnel_manager(self.port)
+        if self.public_url:
+            self.tunnel_manager.set_custom_url(self.public_url)
+
         self.workspace = Workspace(workspace_path)
         self.session_code = generate_session_code()
         self.is_running = False
@@ -104,6 +109,8 @@ class FriKodeServer:
         self.app.router.add_post("/api/session/create", self.handle_create_session)
         self.app.router.add_post("/api/session/end", self.handle_end_session)
         self.app.router.add_get("/api/ping", self.handle_ping)
+        self.app.router.add_get("/api/tunnel", self.handle_get_tunnel)
+        self.app.router.add_post("/api/tunnel", self.handle_manage_tunnel)
         
         # Workspace file routes
         self.app.router.add_get("/api/files", self.handle_get_files)
@@ -137,12 +144,61 @@ class FriKodeServer:
             "workspace_name": self.workspace.name
         })
 
+    async def handle_get_tunnel(self, request: web.Request) -> web.Response:
+        status = self.tunnel_manager.get_status()
+        status["primary_ip"] = get_primary_ip()
+        return web.json_response(status)
+
+    async def handle_manage_tunnel(self, request: web.Request) -> web.Response:
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+
+        action = data.get("action", "status")
+        provider = data.get("provider", "auto")
+
+        if action == "start":
+            url = await asyncio.to_thread(self.tunnel_manager.start, provider=provider)
+            if url:
+                self.public_url = url
+            status = self.tunnel_manager.get_status()
+            await self.broadcast_collaboration({
+                "type": "tunnel_update",
+                "tunnel": status
+            })
+            return web.json_response(status)
+
+        elif action == "stop":
+            await asyncio.to_thread(self.tunnel_manager.stop)
+            self.public_url = None
+            status = self.tunnel_manager.get_status()
+            await self.broadcast_collaboration({
+                "type": "tunnel_update",
+                "tunnel": status
+            })
+            return web.json_response(status)
+
+        elif action == "set_url":
+            custom_url = data.get("url", "").strip()
+            if custom_url:
+                url = self.tunnel_manager.set_custom_url(custom_url)
+                self.public_url = url
+            status = self.tunnel_manager.get_status()
+            await self.broadcast_collaboration({
+                "type": "tunnel_update",
+                "tunnel": status
+            })
+            return web.json_response(status)
+
+        return web.json_response(self.tunnel_manager.get_status())
+
     async def handle_get_session(self, request: web.Request) -> web.Response:
         ips = get_local_ip_addresses()
         primary_ip = get_primary_ip()
 
         # Determine public URL (from tunnel, env var, or forwarded headers)
-        resolved_public_url = self.public_url
+        resolved_public_url = self.public_url or self.tunnel_manager.public_url
         if not resolved_public_url:
             forwarded_proto = request.headers.get("X-Forwarded-Proto")
             forwarded_host = request.headers.get("X-Forwarded-Host")
@@ -155,6 +211,7 @@ class FriKodeServer:
             "ips": ips,
             "port": self.port,
             "public_url": resolved_public_url,
+            "tunnel": self.tunnel_manager.get_status(),
             "workspace_name": self.workspace.name,
             "workspace_path": self.workspace.root_path,
             "peer_count": len(self.peers),
@@ -588,11 +645,14 @@ def run_server(
     public_tunnel: bool = False,
     public_url: Optional[str] = None
 ):
-    tunnel = None
+    tunnel_mgr = get_tunnel_manager(port=port)
     if public_tunnel and not public_url:
-        from .tunnel import CloudflareTunnel
-        tunnel = CloudflareTunnel(port=port)
-        public_url = tunnel.start()
+        print("[FriKode] Starting built-in Remote Public Tunnel...")
+        public_url = tunnel_mgr.start(provider="auto")
+        if public_url:
+            print(f"[FriKode] Remote Access Active: {public_url}")
+        else:
+            print("[FriKode] Warning: Automatic tunnel could not start. Continuing on local Wi-Fi.")
 
     server = FriKodeServer(
         workspace_path=workspace_path,
@@ -605,6 +665,5 @@ def run_server(
     except KeyboardInterrupt:
         print("\n[FriKode] Session stopped by user.")
     finally:
-        if tunnel:
-            tunnel.stop()
+        tunnel_mgr.stop()
 

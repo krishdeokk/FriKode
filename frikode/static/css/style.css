@@ -1784,3 +1784,165 @@ kbd {
     display: none;
   }
 }
+
+/* ===================================================================
+   Remote / Worldwide Tunnel Styling (MailerBot Industrial Aesthetic)
+   =================================================================== */
+
+.remote-pill-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #ffffff;
+  border: 1.5px solid var(--canvas-border);
+  border-radius: 9999px;
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-black);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.remote-pill-btn:hover {
+  border-color: var(--text-black);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.remote-pill-btn.active {
+  background: var(--accent-lime);
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+.remote-beacon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--text-subtle);
+  display: inline-block;
+  transition: background-color 0.2s;
+}
+
+.remote-beacon.active {
+  background-color: var(--status-emerald);
+  box-shadow: 0 0 0 3px rgba(69, 201, 137, 0.35);
+  animation: pulse-beacon 1.8s infinite;
+}
+
+@keyframes pulse-beacon {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(69, 201, 137, 0.6); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(69, 201, 137, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(69, 201, 137, 0); }
+}
+
+/* Host Modal Tunnel Toggle Card */
+.tunnel-toggle-card {
+  background: var(--canvas-bg);
+  border: 1.5px solid var(--canvas-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s;
+}
+
+.tunnel-toggle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tunnel-toggle-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 750;
+  font-size: 13px;
+  color: var(--text-black);
+}
+
+.tunnel-toggle-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* Tactile Toggle Switch */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--canvas-border);
+  border-radius: 22px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--text-black);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+  background-color: var(--accent-lime);
+}
+
+/* Remote Collaboration Modal Styling */
+.remote-status-card {
+  background: var(--canvas-bg);
+  border: 1.5px solid var(--canvas-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.remote-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.remote-status-title {
+  font-weight: 800;
+  font-size: 13.5px;
+  color: var(--text-black);
+}
+
+.remote-status-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}

@@ -38,7 +38,7 @@ def main():
         "--public", "--tunnel",
         action="store_true",
         default=os.environ.get("ENABLE_TUNNEL", "").lower() in ("true", "1", "yes"),
-        help="Enable public internet sharing via Cloudflare Tunnel (no shared Wi-Fi needed)"
+        help="Enable built-in remote access / public tunnel (Pinggy zero-install, Cloudflare, or Localhost.run)"
     )
     parser.add_argument(
         "--public-url",

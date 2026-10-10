@@ -201,6 +201,33 @@ class TestTunnelManager(unittest.TestCase):
         self.assertEqual(tunnel.port, 4000)
         self.assertIsNone(tunnel.public_url)
 
+    def test_multi_provider_tunnel_manager(self):
+        from frikode.tunnel import TunnelManager
+        manager = TunnelManager(port=4000)
+        providers = manager.get_available_providers()
+        self.assertIn("cloudflare", providers)
+        self.assertIn("pinggy", providers)
+        self.assertIn("localhost_run", providers)
+        self.assertIn("custom", providers)
+        self.assertTrue(providers["custom"])
+
+        status = manager.get_status()
+        self.assertFalse(status["active"])
+        self.assertIsNone(status["url"])
+        self.assertEqual(status["port"], 4000)
+
+        # Custom URL setting
+        url = manager.set_custom_url("https://frikode-peer.example.com")
+        self.assertEqual(url, "https://frikode-peer.example.com")
+        self.assertTrue(manager.is_active())
+        self.assertEqual(manager.public_url, "https://frikode-peer.example.com")
+        self.assertEqual(manager.active_provider, "custom")
+
+        # Stop
+        manager.stop()
+        self.assertFalse(manager.is_active())
+        self.assertIsNone(manager.public_url)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -25,6 +25,9 @@ class FriKodeApp {
     this.collapsedFolders = new Set();
     this.pingInterval = null;
 
+    this.tunnelActive = false;
+    this.tunnelUrl = null;
+
     // Pending file action state (for modals)
     this.pendingCreateType = "file"; // "file" or "folder"
     this.pendingDeletePath = null;
@@ -42,6 +45,9 @@ class FriKodeApp {
     try {
       this.session = await api.getSession();
       this._updateNetworkUI();
+      if (this.session && this.session.tunnel) {
+        this._updateTunnelUI(this.session.tunnel);
+      }
     } catch (err) {
       console.warn("Could not reach local session API immediately:", err);
     }
@@ -78,6 +84,9 @@ class FriKodeApp {
     setIcon("topbarCopyIcon", Icons.copy);
     setIcon("closeActivityIcon", Icons.close);
     setIcon("modalProfileIcon", Icons.users);
+    setIcon("modalHostGlobeIcon", Icons.globe);
+    setIcon("modalRemoteGlobeIcon", Icons.globe);
+    setIcon("modalCopyRemoteIcon", Icons.copy);
   }
 
   _initColorSwatches(containerId = "colorSwatches", onColorSelect = null) {
@@ -213,10 +222,20 @@ class FriKodeApp {
       };
     }
 
+    // Remote Collaboration Modal
+    bindClick("btnOpenRemoteModal", () => this.openRemoteModal());
+    bindClick("btnCloseRemoteModal", () => this.closeModal("remoteModal"));
+    bindClick("btnCloseRemoteModalFooter", () => this.closeModal("remoteModal"));
+    bindClick("btnToggleTunnelAction", () => this.toggleTunnel());
+    bindClick("btnCopyRemoteLink", () => this.copyRemoteLink());
+    bindClick("btnCopyInviteMessage", () => this.copyInviteMessage());
+    bindClick("btnApplyCustomUrl", () => this.applyCustomTunnelUrl());
+
     // Top Bar Actions
     document.getElementById("btnCopyInvite").onclick = () => {
       const fullUrl = this._getInviteUrl();
-      copyToClipboard(fullUrl, "Wi-Fi invite address copied!");
+      const label = this.tunnelUrl ? "Remote invite link copied!" : "Wi-Fi invite address copied!";
+      copyToClipboard(fullUrl, label);
     };
     document.getElementById("btnSaveFile").onclick = () => {
       this.editorManager.saveCurrentFile();
@@ -304,6 +323,9 @@ class FriKodeApp {
     try {
       this.session = await api.getSession();
       this._updateNetworkUI();
+      if (this.session && this.session.tunnel) {
+        this._updateTunnelUI(this.session.tunnel);
+      }
     } catch (err) {
       console.warn("Could not refresh session info:", err);
     }
@@ -321,6 +343,7 @@ class FriKodeApp {
     try {
       const workspaceInput = document.getElementById("hostWorkspaceInput")?.value?.trim() || "sample_project";
       const hostName = document.getElementById("hostNameInput")?.value?.trim() || safeGetStorage("frikode_name", "Developer");
+      const enableTunnel = document.getElementById("hostEnableTunnelCheckbox")?.checked || false;
       this.user.name = hostName;
       safeSetStorage("frikode_name", hostName);
 
@@ -338,6 +361,18 @@ class FriKodeApp {
 
       this.closeModal("hostModal");
       await this.enterWorkspace();
+
+      if (enableTunnel && !this.tunnelActive) {
+        showToast("Starting remote access link...", "info");
+        api.startTunnel("auto").then(t => {
+          this._updateTunnelUI(t);
+          if (t && t.active && t.url) {
+            showToast("Remote link ready: " + t.url, "success");
+          }
+        }).catch(err => {
+          console.warn("Tunnel auto-start failed:", err);
+        });
+      }
     } catch (err) {
       console.error("Error starting host session:", err);
       showToast("Error starting session: " + (err.message || err), "error");
@@ -781,6 +816,12 @@ class FriKodeApp {
         this.loadFiles();
         showToast("Host switched workspace", "info");
         break;
+
+      case "tunnel_update":
+        if (msg.tunnel) {
+          this._updateTunnelUI(msg.tunnel);
+        }
+        break;
     }
   }
 
@@ -1107,6 +1148,192 @@ class FriKodeApp {
   }
 
   // -------------------------------------------------------------
+  // Remote Access & Tunnel Management
+  // -------------------------------------------------------------
+  async openRemoteModal() {
+    this.openModal("remoteModal");
+    try {
+      const tunnel = await api.getTunnel();
+      this._updateTunnelUI(tunnel);
+    } catch (err) {
+      console.warn("Could not fetch tunnel status:", err);
+    }
+  }
+
+  async toggleTunnel() {
+    const btnAction = document.getElementById("btnToggleTunnelAction");
+    const btnText = document.getElementById("btnToggleTunnelText");
+    const origText = btnText ? btnText.textContent : "";
+    if (btnAction) btnAction.disabled = true;
+
+    try {
+      if (this.tunnelActive) {
+        if (btnText) btnText.textContent = "Stopping...";
+        const res = await api.stopTunnel();
+        this._updateTunnelUI(res);
+        showToast("Remote access turned off", "info");
+      } else {
+        if (btnText) btnText.textContent = "Starting...";
+        const provider = document.getElementById("selectTunnelProvider")?.value || "auto";
+        const res = await api.startTunnel(provider);
+        this._updateTunnelUI(res);
+        if (res.active && res.url) {
+          showToast("Remote link ready! Share the link with teammates.", "success");
+        } else if (res.error) {
+          showToast(`Tunnel notice: ${res.error}`, "info");
+        }
+      }
+    } catch (err) {
+      console.error("Tunnel toggle error:", err);
+      showToast("Tunnel error: " + (err.message || err), "error");
+      if (btnText) btnText.textContent = origText;
+    } finally {
+      if (btnAction) btnAction.disabled = false;
+    }
+  }
+
+  copyRemoteLink() {
+    const url = document.getElementById("modalRemoteUrlInput")?.value || this.tunnelUrl;
+    if (url) {
+      copyToClipboard(url, "Remote link copied to clipboard!");
+    } else {
+      showToast("No active remote link to copy", "info");
+    }
+  }
+
+  copyInviteMessage() {
+    const url = this.tunnelUrl || this._getInviteUrl();
+    const code = this.session?.session_code || "FRI-....";
+    const wsName = this.session?.workspace_name || "Workspace";
+    const isRemote = !!this.tunnelUrl || (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+    const msg = [
+      `🚀 Join my FriKode session: "${wsName}"`,
+      `🔑 Session Code: ${code}`,
+      `🌐 Link (${isRemote ? "Remote / Internet" : "Local Wi-Fi"}): ${url}`
+    ].join("\n");
+    copyToClipboard(msg, "Complete invite message copied!");
+  }
+
+  async applyCustomTunnelUrl() {
+    const input = document.getElementById("customTunnelUrlInput");
+    const url = input?.value?.trim();
+    if (!url) {
+      showToast("Please enter a valid URL (e.g. https://yourname.ngrok.app)", "error");
+      return;
+    }
+    try {
+      const res = await api.setCustomTunnelUrl(url);
+      this._updateTunnelUI(res);
+      showToast("Custom remote URL applied!", "success");
+      if (input) input.value = "";
+    } catch (err) {
+      showToast("Failed to apply custom URL: " + (err.message || err), "error");
+    }
+  }
+
+  _updateTunnelUI(tunnel) {
+    if (!tunnel) return;
+    this.tunnelActive = !!tunnel.active;
+    this.tunnelUrl = tunnel.url || null;
+
+    if (tunnel.url) {
+      if (this.session) this.session.public_url = tunnel.url;
+      const topbarAddr = document.getElementById("topbarAddress");
+      if (topbarAddr) topbarAddr.textContent = tunnel.url;
+      const homeIpBadge = document.getElementById("homeLocalIpBadge");
+      if (homeIpBadge) homeIpBadge.textContent = `Remote Link: ${tunnel.url}`;
+      const publicRow = document.getElementById("modalHostPublicRow");
+      if (publicRow) publicRow.style.display = "flex";
+      const publicAddr = document.getElementById("modalHostPublicAddress");
+      if (publicAddr) publicAddr.textContent = tunnel.url;
+    }
+
+    // Topbar Beacon & Label
+    const topbarBeacon = document.getElementById("topbarRemoteBeacon");
+    const topbarText = document.getElementById("topbarRemoteText");
+    if (topbarBeacon) {
+      if (tunnel.active) {
+        topbarBeacon.classList.add("active");
+      } else {
+        topbarBeacon.classList.remove("active");
+      }
+    }
+    if (topbarText) {
+      if (tunnel.active) {
+        topbarText.textContent = "Remote: Active";
+      } else {
+        topbarText.textContent = "Remote Access";
+      }
+    }
+
+    // Modal Status Beacon, Title & Description
+    const modalBeacon = document.getElementById("modalRemoteBeacon");
+    const modalStatusText = document.getElementById("modalRemoteStatusText");
+    const modalStatusDesc = document.getElementById("modalRemoteStatusDesc");
+
+    if (modalBeacon) {
+      if (tunnel.active) {
+        modalBeacon.className = "remote-beacon active";
+      } else {
+        modalBeacon.className = "remote-beacon";
+      }
+    }
+
+    if (modalStatusText) {
+      if (tunnel.active) {
+        const provLabel = tunnel.provider === "cloudflare" ? "Cloudflare" : (tunnel.provider === "pinggy" ? "Pinggy" : "Public Link");
+        modalStatusText.textContent = `Remote Active (${provLabel})`;
+      } else if (tunnel.error) {
+        modalStatusText.textContent = `Remote Failed`;
+      } else {
+        modalStatusText.textContent = `Local Wi-Fi Only`;
+      }
+    }
+
+    if (modalStatusDesc) {
+      if (tunnel.active) {
+        modalStatusDesc.textContent = "Secure remote tunnel is active! Anyone on another Wi-Fi or mobile hotspot can join with your public link.";
+      } else if (tunnel.error) {
+        modalStatusDesc.textContent = `Could not start tunnel: ${tunnel.error}. You can also set a custom URL or try a different provider below.`;
+      } else {
+        modalStatusDesc.textContent = "Enable remote access to generate a secure public link for friends on other Wi-Fi networks or mobile data.";
+      }
+    }
+
+    // Action button text and styling
+    const btnAction = document.getElementById("btnToggleTunnelAction");
+    const btnText = document.getElementById("btnToggleTunnelText");
+    if (btnText && btnAction) {
+      if (tunnel.active) {
+        btnText.textContent = "Stop Remote Link";
+        btnAction.className = "mbot-btn mbot-btn-tan";
+      } else {
+        btnText.textContent = "Start Remote Link";
+        btnAction.className = "mbot-btn mbot-btn-lime";
+      }
+    }
+
+    // URL input and section
+    const urlSection = document.getElementById("remoteUrlSection");
+    const urlInput = document.getElementById("modalRemoteUrlInput");
+    if (urlSection && urlInput) {
+      if (tunnel.active && tunnel.url) {
+        urlSection.style.display = "block";
+        urlInput.value = tunnel.url;
+      } else {
+        urlSection.style.display = "none";
+        urlInput.value = "";
+      }
+    }
+
+    // Host modal checkbox sync
+    const hostCheckbox = document.getElementById("hostEnableTunnelCheckbox");
+    if (hostCheckbox) {
+      hostCheckbox.checked = !!tunnel.active;
+    }
+  }
+
+  // -------------------------------------------------------------
   // Helpers
   // -------------------------------------------------------------
   _updateNetworkUI() {
@@ -1155,6 +1382,7 @@ class FriKodeApp {
   }
 
   _getInviteUrl() {
+    if (this.tunnelUrl) return this.tunnelUrl;
     if (!this.session) return window.location.origin;
     if (this.session.public_url) return this.session.public_url;
     const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";

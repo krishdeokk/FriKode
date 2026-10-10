@@ -275,6 +275,12 @@
               <span id="topbarCopyIcon"></span>
             </button>
           </div>
+
+          <!-- Built-in Remote Access / Worldwide Link Button -->
+          <button class="remote-pill-btn" id="btnOpenRemoteModal" title="Manage Remote Access: Collaborate across different Wi-Fi networks">
+            <span class="remote-beacon" id="topbarRemoteBeacon"></span>
+            <span id="topbarRemoteText">Remote Access</span>
+          </button>
         </div>
 
         <div class="topbar-right">
@@ -466,6 +472,23 @@
             <div class="color-swatches" id="hostColorSwatches">
               <!-- Swatches generated dynamically -->
             </div>
+          </div>
+
+          <!-- Remote Internet Collaboration Option -->
+          <div class="tunnel-toggle-card" id="hostTunnelCard">
+            <div class="tunnel-toggle-header">
+              <div class="tunnel-toggle-title">
+                <span id="modalHostGlobeIcon"></span>
+                <span>Enable Remote Access (Different Wi-Fi)</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="hostEnableTunnelCheckbox">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <p class="tunnel-toggle-desc">
+              Creates a secure public link so teammates anywhere in the world can join over the internet without needing the same local Wi-Fi router.
+            </p>
           </div>
 
           <!-- Network Info Review -->
@@ -692,6 +715,83 @@
         <div class="modal-footer">
           <button class="mbot-btn mbot-btn-tan" id="btnCancelProfile" style="padding: 8px 18px; font-size: 13px;">Cancel</button>
           <button class="mbot-btn mbot-btn-lime" id="btnSaveProfile" style="padding: 8px 20px; font-size: 13px;">Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Remote Collaboration & Public Link Modal -->
+    <div class="modal-backdrop" id="remoteModal">
+      <div class="modal-box" style="max-width: 500px;">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span id="modalRemoteGlobeIcon"></span>
+            <span>Remote Access (Different Wi-Fi)</span>
+          </div>
+          <button class="modal-close-btn" id="btnCloseRemoteModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="remote-status-card" id="remoteStatusCard">
+            <div class="remote-status-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="remote-beacon" id="modalRemoteBeacon"></span>
+                <span class="remote-status-title" id="modalRemoteStatusText">Local Wi-Fi Only</span>
+              </div>
+              <button class="mbot-btn mbot-btn-lime" id="btnToggleTunnelAction" style="padding: 6px 14px; font-size: 12px;">
+                <span id="btnToggleTunnelText">Start Remote Link</span>
+              </button>
+            </div>
+            <p class="remote-status-desc" id="modalRemoteStatusDesc">
+              Enable remote access to generate a secure public link for friends on other Wi-Fi networks or mobile hotspots.
+            </p>
+          </div>
+
+          <!-- Active Public Link Section -->
+          <div class="form-group" id="remoteUrlSection" style="display: none;">
+            <label class="form-label">Worldwide Share Link (HTTPS)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" class="form-input mono" id="modalRemoteUrlInput" readonly value="" placeholder="https://...">
+              <button class="mbot-btn mbot-btn-lime" id="btnCopyRemoteLink" style="padding: 9px 16px; white-space: nowrap; font-size: 12.5px;">
+                <span id="modalCopyRemoteIcon"></span>
+                <span>Copy Link</span>
+              </button>
+            </div>
+            <span class="form-help">Teammates on any Wi-Fi in the world can open this link directly in their browser.</span>
+          </div>
+
+          <!-- Copy Invite Text Button -->
+          <button class="mbot-btn mbot-btn-tan" id="btnCopyInviteMessage" style="width: 100%; justify-content: center; padding: 10px; font-size: 12.5px;">
+            <span>📋 Copy Complete Invite Message</span>
+          </button>
+
+          <!-- Advanced Tunnel Options Accordion -->
+          <div class="accordion-section" style="margin-top: 6px;">
+            <details>
+              <summary style="cursor: pointer; font-size: 11.5px; font-weight: 700; color: var(--text-muted); font-family: var(--font-mono);">
+                ⚙ ADVANCED: TUNNEL PROVIDER & CUSTOM URL
+              </summary>
+              <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding: 12px; background: var(--canvas-bg); border-radius: 8px; border: 1.5px solid var(--canvas-border);">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label" style="font-size: 11px;">Preferred Tunnel Provider</label>
+                  <select class="form-input" id="selectTunnelProvider" style="font-size: 12px; padding: 6px 10px;">
+                    <option value="auto">Auto (Cloudflare or Pinggy SSH)</option>
+                    <option value="pinggy">Pinggy SSH (Zero-install, Port 443)</option>
+                    <option value="cloudflare">Cloudflare Quick Tunnel</option>
+                    <option value="localhost_run">Localhost.run SSH</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label" style="font-size: 11px;">Custom Remote URL (ngrok, Tailscale, VPS)</label>
+                  <div style="display: flex; gap: 6px;">
+                    <input type="text" class="form-input mono" id="customTunnelUrlInput" placeholder="https://..." style="font-size: 12px; padding: 6px 10px;">
+                    <button class="mbot-btn mbot-btn-tan" id="btnApplyCustomUrl" style="padding: 6px 12px; font-size: 12px;">Apply</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="mbot-btn mbot-btn-tan" id="btnCloseRemoteModalFooter" style="padding: 8px 18px; font-size: 13px;">Close</button>
         </div>
       </div>
     </div>
