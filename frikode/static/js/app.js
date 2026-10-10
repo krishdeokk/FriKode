@@ -36,23 +36,49 @@ class FriKodeApp {
   }
 
   async init() {
-    this._injectIcons();
-    this._initColorSwatches();
-    this._bindEvents();
-    this._initEditor();
-
-    // Check if running on a live FriKode host
+    // 1. Immediately render fallback network UI based on origin/port (never stuck on scanning or detecting)
     try {
-      this.session = await api.getSession();
       this._updateNetworkUI();
-      if (this.session && this.session.tunnel) {
-        this._updateTunnelUI(this.session.tunnel);
-      }
-    } catch (err) {
-      console.warn("Could not reach local session API immediately:", err);
+    } catch (e) {
+      console.warn("[FriKode] Initial network UI render error:", e);
     }
 
-    // Check URL parameters for 1-click invite (?join=1 or ?code=FRI-XXXX)
+    // 2. Inject SVG icons
+    try {
+      this._injectIcons();
+    } catch (e) {
+      console.warn("[FriKode] Icon injection error:", e);
+    }
+
+    // 3. Initialize user color swatches
+    try {
+      this._initColorSwatches();
+    } catch (e) {
+      console.warn("[FriKode] Color swatches error:", e);
+    }
+
+    // 4. Bind all click events & keyboard shortcuts
+    try {
+      this._bindEvents();
+    } catch (e) {
+      console.warn("[FriKode] Event binding error:", e);
+    }
+
+    // 5. Initialize code editor
+    try {
+      this._initEditor();
+    } catch (e) {
+      console.warn("[FriKode] Editor initialization error:", e);
+    }
+
+    // 6. Check if running on a live FriKode host with automatic retry
+    try {
+      await this._fetchSessionWithRetry();
+    } catch (e) {
+      console.warn("[FriKode] Session retry error:", e);
+    }
+
+    // 7. Check URL parameters for 1-click invite (?join=1 or ?code=FRI-XXXX)
     const urlParams = new URLSearchParams(window.location.search);
     const codeParam = urlParams.get("code") || urlParams.get("session");
     const joinParam = urlParams.get("join");
@@ -61,6 +87,29 @@ class FriKodeApp {
         this.openJoinModal();
       }, 300);
     }
+  }
+
+  async _fetchSessionWithRetry(maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.session = await api.getSession();
+        this._updateNetworkUI();
+        if (this.session && this.session.tunnel) {
+          this._updateTunnelUI(this.session.tunnel);
+        }
+        return this.session;
+      } catch (err) {
+        if (attempt === 1) {
+          console.warn("[FriKode] Backend session API pending or booting...", err);
+        }
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 600 * attempt));
+        }
+      }
+    }
+    // Update UI even if fetch ultimately failed
+    this._updateNetworkUI();
+    return null;
   }
 
   _injectIcons() {
@@ -160,7 +209,15 @@ class FriKodeApp {
   _bindEvents() {
     const bindClick = (id, handler) => {
       const el = document.getElementById(id);
-      if (el) el.onclick = handler;
+      if (el) {
+        el.onclick = (e) => {
+          try {
+            handler(e);
+          } catch (err) {
+            console.error(`[FriKode] Error in click handler for #${id}:`, err);
+          }
+        };
+      }
     };
 
     // Landing Header Navigation Buttons
@@ -327,6 +384,17 @@ class FriKodeApp {
         this.toggleMobileSidebar(false);
       }
     });
+
+    // Window Resize Handler (ensures editor layout & CodeMirror adapt instantly to window sizing)
+    let resizeDebounce = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeDebounce);
+      resizeDebounce = setTimeout(() => {
+        if (this.editorManager?.cm) {
+          this.editorManager.cm.refresh();
+        }
+      }, 100);
+    });
   }
 
   // -------------------------------------------------------------
@@ -357,6 +425,8 @@ class FriKodeApp {
       nameInput.value = safeGetStorage("frikode_name", this.user.name || "Developer");
     }
     this._initColorSwatches("hostColorSwatches");
+    this._updateNetworkUI(); // Immediate render using current origin/port
+    this.openModal("hostModal"); // Open modal instantly on click
     try {
       this.session = await api.getSession();
       this._updateNetworkUI();
@@ -365,8 +435,8 @@ class FriKodeApp {
       }
     } catch (err) {
       console.warn("Could not refresh session info:", err);
+      this._updateNetworkUI();
     }
-    this.openModal("hostModal");
   }
 
   async confirmHost() {
@@ -1376,6 +1446,8 @@ class FriKodeApp {
     if (hostCheckbox) {
       hostCheckbox.checked = !!tunnel.active;
     }
+  }
+
   // -------------------------------------------------------------
   // In-Browser Compiler & Code Execution
   // -------------------------------------------------------------
@@ -1616,22 +1688,46 @@ class FriKodeApp {
   // Helpers
   // -------------------------------------------------------------
   _updateNetworkUI() {
-    if (!this.session) return;
-    const ip = this.session.primary_ip || "127.0.0.1";
-    const port = this.session.port || 4000;
+    const isRemote = window.location.hostname !== "localhost" && 
+                     window.location.hostname !== "127.0.0.1" && 
+                     window.location.hostname !== "";
+    const port = this.session?.port || window.location.port || 4000;
+    const ip = this.session?.primary_ip || (isRemote ? window.location.hostname : "127.0.0.1");
     const fullWifiUrl = `http://${ip}:${port}`;
-    const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
-    const publicUrl = this.session.public_url || (isRemote ? window.location.origin : null);
+    const publicUrl = this.session?.public_url || (isRemote ? window.location.origin : null);
 
-    if (publicUrl) {
-      document.getElementById("homeLocalIpBadge").textContent = `Remote Link: ${publicUrl}`;
-      const publicRow = document.getElementById("modalHostPublicRow");
-      if (publicRow) {
-        publicRow.style.display = "flex";
-        document.getElementById("modalHostPublicAddress").textContent = publicUrl;
+    const homeBadge = document.getElementById("homeLocalIpBadge");
+    if (homeBadge) {
+      if (publicUrl) {
+        homeBadge.textContent = `Remote Link: ${publicUrl}`;
+      } else if (this.session && this.session.primary_ip) {
+        homeBadge.textContent = `Wi-Fi Address: ${fullWifiUrl}`;
+      } else {
+        homeBadge.textContent = isRemote 
+          ? `Host: ${window.location.origin}` 
+          : `Local Host: http://${window.location.host || `localhost:${port}`}`;
       }
+    }
+
+    // Modal Host Addresses
+    const publicRow = document.getElementById("modalHostPublicRow");
+    const publicAddr = document.getElementById("modalHostPublicAddress");
+    if (publicUrl) {
+      if (publicRow) publicRow.style.display = "flex";
+      if (publicAddr) publicAddr.textContent = publicUrl;
     } else {
-      document.getElementById("homeLocalIpBadge").textContent = `Wi-Fi Address: ${fullWifiUrl}`;
+      if (publicRow) publicRow.style.display = "none";
+      if (publicAddr) publicAddr.textContent = "Inactive (Local Wi-Fi Only)";
+    }
+
+    const modalWifi = document.getElementById("modalHostWifiAddress");
+    if (modalWifi) {
+      modalWifi.textContent = fullWifiUrl;
+    }
+
+    const modalCode = document.getElementById("modalHostSessionCode");
+    if (modalCode) {
+      modalCode.textContent = this.session?.session_code || "FRI-READY";
     }
 
     // If viewing via remote link or hosted domain, make Join the primary action
@@ -1655,9 +1751,6 @@ class FriKodeApp {
         btnNavHost.className = "mbot-btn mbot-btn-tan";
       }
     }
-
-    document.getElementById("modalHostWifiAddress").textContent = fullWifiUrl;
-    document.getElementById("modalHostSessionCode").textContent = this.session.session_code || "FRI-....";
   }
 
   _getInviteUrl() {

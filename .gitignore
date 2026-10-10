@@ -9,3 +9,9 @@ __pycache__/
 .frikode_tmp/
 *.out
 
+# Temporary test workspaces
+Test Phase/
+deokk_project/
+remote_testing_mandal/
+sample_project/project.c
+

@@ -137,7 +137,14 @@ class FriKodeServer:
 
     async def handle_index(self, request: web.Request) -> web.Response:
         index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
-        return web.FileResponse(index_path)
+        return web.FileResponse(
+            index_path,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
 
     async def handle_ping(self, request: web.Request) -> web.Response:
         return web.json_response({
@@ -197,8 +204,13 @@ class FriKodeServer:
         return web.json_response(self.tunnel_manager.get_status())
 
     async def handle_get_session(self, request: web.Request) -> web.Response:
-        ips = get_local_ip_addresses()
-        primary_ip = get_primary_ip()
+        try:
+            ips = get_local_ip_addresses()
+            primary_ip = get_primary_ip(ips)
+        except Exception as e:
+            logger.warning(f"Error discovering local interfaces: {e}")
+            ips = [{"ip": "127.0.0.1", "label": "Localhost (Loopback)", "is_primary": True}]
+            primary_ip = "127.0.0.1"
 
         # Determine public URL (from tunnel, env var, or forwarded headers)
         resolved_public_url = self.public_url or self.tunnel_manager.public_url

@@ -12,10 +12,10 @@
 
   <!-- CodeMirror Base & Custom Theme -->
   <link rel="stylesheet" href="vendor/codemirror/codemirror.css">
-  <link rel="stylesheet" href="css/codemirror-theme.css">
+  <link rel="stylesheet" href="css/codemirror-theme.css?v=2.2">
 
   <!-- MailerBot-Inspired FriKode Stylesheet -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=2.3">
 </head>
 <body>
   <div id="app">
@@ -79,12 +79,12 @@
         <div class="hero-meta-highlight">
           <span>⚡ 0ms cloud hops</span>
           <span>•</span>
-          <span id="homeLocalIpBadge">Local Network: Scanning...</span>
+          <span id="homeLocalIpBadge">Local Network: Detecting...</span>
         </div>
 
         <div class="hero-cta-group">
           <!-- Primary CTA Button with Sliding Arrow -->
-          <button class="mbot-btn mbot-btn-lime" id="btnOpenHostModal" style="font-size: 15px; padding: 14px 28px;">
+          <button class="mbot-btn mbot-btn-lime" id="btnOpenHostModal">
             <span>Start Hosting</span>
             <span class="mbot-arrow-track" aria-hidden="true">
               <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg primary"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
@@ -93,7 +93,7 @@
           </button>
 
           <!-- Secondary CTA -->
-          <button class="mbot-btn mbot-btn-tan" id="btnOpenJoinModal" style="font-size: 15px; padding: 14px 28px;">
+          <button class="mbot-btn mbot-btn-tan" id="btnOpenJoinModal">
             <span>Join with Code</span>
           </button>
         </div>
@@ -565,7 +565,7 @@
             <div class="network-field" id="modalHostPublicRow" style="display: none;">
               <span class="network-field-label">Remote Link (Anywhere)</span>
               <div class="network-field-value">
-                <span id="modalHostPublicAddress">Scanning...</span>
+                <span id="modalHostPublicAddress">Inactive</span>
                 <button class="copy-mini-btn" id="btnCopyModalPublicAddress" title="Copy Remote Link">
                   <span id="modalCopyPublicIcon"></span>
                 </button>
@@ -574,7 +574,7 @@
             <div class="network-field" id="modalHostWifiRow">
               <span class="network-field-label">Wi-Fi Address (LAN)</span>
               <div class="network-field-value">
-                <span id="modalHostWifiAddress">Scanning...</span>
+                <span id="modalHostWifiAddress">Detecting...</span>
                 <button class="copy-mini-btn" id="btnCopyModalAddress" title="Copy Address">
                   <span id="modalCopyIcon"></span>
                 </button>
@@ -583,7 +583,7 @@
             <div class="network-field">
               <span class="network-field-label">Session Code</span>
               <div class="network-field-value">
-                <span id="modalHostSessionCode">FRI-....</span>
+                <span id="modalHostSessionCode">FRI-READY</span>
                 <button class="copy-mini-btn" id="btnCopyModalCode" title="Copy Code">
                   <span id="modalCopyCodeIcon"></span>
                 </button>
@@ -884,6 +884,6 @@
   <script src="vendor/codemirror/addon/active-line.js"></script>
 
   <!-- FriKode Main ES Module Application -->
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=2.3"></script>
 </body>
 </html>

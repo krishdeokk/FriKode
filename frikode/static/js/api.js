@@ -12,16 +12,23 @@ export class FriKodeApi {
     this.baseUrl = url.replace(/\/$/, "");
   }
 
-  async _fetch(endpoint, options = {}) {
+  async _fetch(endpoint, options = {}, timeoutMs = 4000) {
     const url = `${this.baseUrl}${endpoint}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
       const res = await fetch(url, {
+        cache: "no-store",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
           ...options.headers
         },
         ...options
       });
+      clearTimeout(timer);
 
       if (!res.ok) {
         let errMessage = `HTTP error ${res.status}`;
@@ -36,6 +43,7 @@ export class FriKodeApi {
 
       return await res.json();
     } catch (err) {
+      clearTimeout(timer);
       console.error(`[FriKode API] Error on ${endpoint}:`, err);
       throw err;
     }
