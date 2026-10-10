@@ -87,6 +87,13 @@ class FriKodeApp {
     setIcon("modalHostGlobeIcon", Icons.globe);
     setIcon("modalRemoteGlobeIcon", Icons.globe);
     setIcon("modalCopyRemoteIcon", Icons.copy);
+    setIcon("mobileNavIcon", Icons.menu);
+    setIcon("mobileSidebarIcon", Icons.menu);
+    setIcon("runIcon", Icons.play);
+    setIcon("compilerTerminalIcon", Icons.terminal);
+    setIcon("compilerClearIcon", Icons.clear);
+    setIcon("compilerMaxIcon", Icons.maximize);
+    setIcon("statusConsoleIcon", Icons.terminal);
   }
 
   _initColorSwatches(containerId = "colorSwatches", onColorSelect = null) {
@@ -131,12 +138,16 @@ class FriKodeApp {
       },
       onTabChange: (tabInfo) => {
         const langEl = document.getElementById("statusLanguage");
+        const compilerLangEl = document.getElementById("compilerLangBadge");
         if (langEl) {
           if (tabInfo) {
-            langEl.textContent = tabInfo.mode.toUpperCase();
+            const mode = tabInfo.mode.toUpperCase();
+            langEl.textContent = mode;
+            if (compilerLangEl) compilerLangEl.textContent = mode;
             this._notifyFileFocus(tabInfo.path);
           } else {
             langEl.textContent = "Plain Text";
+            if (compilerLangEl) compilerLangEl.textContent = "PYTHON";
             this._notifyFileFocus(null);
           }
         }
@@ -222,6 +233,27 @@ class FriKodeApp {
       };
     }
 
+    // Mobile Navigation & Sidebar Toggles
+    bindClick("btnMobileNavToggle", () => this.toggleMobileNav());
+    bindClick("btnToggleMobileSidebar", () => this.toggleMobileSidebar());
+    bindClick("sidebarBackdrop", () => this.toggleMobileSidebar(false));
+
+    // Compiler & Run Code Controls
+    bindClick("btnRunCode", () => this.runCurrentCode());
+    bindClick("btnToggleConsoleStatus", () => this.toggleCompilerPanel());
+    bindClick("btnCloseCompiler", () => this.toggleCompilerPanel(false));
+    bindClick("btnMaximizeCompiler", () => this.toggleCompilerMaximize());
+    bindClick("btnClearOutput", () => this.clearCompilerOutput());
+    bindClick("btnToggleStdin", () => this.toggleStdinBar());
+    bindClick("btnRunStdin", () => this.runCurrentCode(true));
+
+    const stdinInput = document.getElementById("compilerStdinInput");
+    if (stdinInput) {
+      stdinInput.onkeydown = (e) => {
+        if (e.key === "Enter") this.runCurrentCode(true);
+      };
+    }
+
     // Remote Collaboration Modal
     bindClick("btnOpenRemoteModal", () => this.openRemoteModal());
     bindClick("btnCloseRemoteModal", () => this.closeModal("remoteModal"));
@@ -286,8 +318,13 @@ class FriKodeApp {
         e.preventDefault();
         this.editorManager.saveCurrentFile();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        this.runCurrentCode();
+      }
       if (e.key === "Escape") {
         document.querySelectorAll(".modal-backdrop.active").forEach(m => m.classList.remove("active"));
+        this.toggleMobileSidebar(false);
       }
     });
   }
@@ -667,6 +704,7 @@ class FriKodeApp {
           rowEl.onclick = () => {
             this.editorManager.openFile(node.path);
             this._renderFileTree();
+            this.toggleMobileSidebar(false);
           };
 
           // Context action on right click or hover
@@ -820,6 +858,13 @@ class FriKodeApp {
       case "tunnel_update":
         if (msg.tunnel) {
           this._updateTunnelUI(msg.tunnel);
+        }
+        break;
+
+      case "code_executed":
+        if (msg.user_name) {
+          const statusTxt = msg.status === "success" ? "ran successfully" : (msg.status === "compile_error" ? "compile error" : "failed");
+          this._addActivity(`${msg.user_name} ran ${msg.file} (${statusTxt})`);
         }
         break;
     }
@@ -1331,6 +1376,240 @@ class FriKodeApp {
     if (hostCheckbox) {
       hostCheckbox.checked = !!tunnel.active;
     }
+  // -------------------------------------------------------------
+  // In-Browser Compiler & Code Execution
+  // -------------------------------------------------------------
+  async runCurrentCode(withStdin = false) {
+    if (!this.editorManager) return;
+    const activePath = this.editorManager.activePath;
+    const activeDoc = this.editorManager.doc;
+    const currentCode = activeDoc ? activeDoc.toString() : "";
+
+    if (!activePath && !currentCode.trim()) {
+      showToast("Open or create a file to run code", "info");
+      return;
+    }
+
+    // Auto-save active file before running if path exists
+    if (activePath) {
+      this.editorManager.saveCurrentFile();
+    }
+
+    // Ensure compiler panel is open
+    this.toggleCompilerPanel(true);
+
+    const btnRun = document.getElementById("btnRunCode");
+    const runText = document.getElementById("runBtnText");
+    const beacon = document.getElementById("compilerBeacon");
+    const statusBadge = document.getElementById("compilerStatusBadge");
+    const pre = document.getElementById("compilerOutputPre");
+    const statusDot = document.getElementById("statusConsoleDot");
+    const stdinInput = document.getElementById("compilerStdinInput");
+
+    const stdinVal = withStdin && stdinInput ? stdinInput.value : (stdinInput?.value || "");
+
+    if (btnRun) btnRun.classList.add("running");
+    if (runText) runText.textContent = "Running...";
+    if (beacon) beacon.className = "compiler-beacon running";
+    if (statusBadge) {
+      statusBadge.className = "compiler-badge status running";
+      statusBadge.textContent = "Compiling & Running...";
+    }
+    if (statusDot) statusDot.className = "status-mini-dot running";
+
+    const fileName = activePath ? activePath.split("/").pop() : "snippet";
+    const timestamp = new Date().toLocaleTimeString();
+
+    // Append launch header to output
+    const startNotice = `\n[${timestamp}] ▶ Running ${fileName}...\n` + "─".repeat(45) + "\n";
+    pre.innerHTML += `<span class="output-system">${this._escapeHtml(startNotice)}</span>`;
+    pre.scrollTop = pre.scrollHeight;
+
+    try {
+      const res = await api.runCode({
+        path: activePath,
+        code: currentCode,
+        stdin: stdinVal,
+        userName: this.user.name
+      });
+
+      // If language was JavaScript and host doesn't have Node, evaluate in browser safely
+      if (res.client_eval) {
+        pre.innerHTML += `<span class="output-dim">[Browser JS Engine] Running JavaScript in sandbox...\n</span>`;
+        let jsLogs = [];
+        const origLog = console.log;
+        const origErr = console.error;
+        const startTime = performance.now();
+        try {
+          console.log = (...args) => {
+            jsLogs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
+          };
+          console.error = (...args) => {
+            jsLogs.push("[Error] " + args.join(" "));
+          };
+          const fn = new Function(currentCode);
+          fn();
+          const elapsed = Math.round(performance.now() - startTime);
+          const out = jsLogs.join("\n");
+          if (out) pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(out)}\n</span>`;
+          pre.innerHTML += `<span class="output-success">✓ Executed in browser in ${elapsed}ms\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status success";
+            statusBadge.textContent = `Browser JS (${elapsed}ms)`;
+          }
+          if (beacon) beacon.className = "compiler-beacon success";
+          if (statusDot) statusDot.className = "status-mini-dot active";
+        } catch (evalErr) {
+          pre.innerHTML += `<span class="output-stderr">Runtime Error: ${this._escapeHtml(evalErr.message)}\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status error";
+            statusBadge.textContent = "Error";
+          }
+          if (beacon) beacon.className = "compiler-beacon error";
+        } finally {
+          console.log = origLog;
+          console.error = origErr;
+        }
+      } else {
+        // Output stdout if any
+        if (res.stdout) {
+          pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(res.stdout)}</span>`;
+          if (!res.stdout.endsWith("\n")) pre.innerHTML += "\n";
+        }
+
+        // Output stderr if any
+        if (res.stderr) {
+          pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(res.stderr)}</span>`;
+          if (!res.stderr.endsWith("\n")) pre.innerHTML += "\n";
+        }
+
+        // Output summary status
+        if (res.status === "success") {
+          pre.innerHTML += `<span class="output-success">✓ Process finished with exit code ${res.exit_code} (${res.duration_ms}ms)\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status success";
+            statusBadge.textContent = `Exit: ${res.exit_code} (${res.duration_ms}ms)`;
+          }
+          if (beacon) beacon.className = "compiler-beacon success";
+          if (statusDot) statusDot.className = "status-mini-dot active";
+        } else if (res.status === "compile_error") {
+          pre.innerHTML += `<span class="output-stderr">✕ Compilation failed (${res.duration_ms}ms)\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status error";
+            statusBadge.textContent = `Compile Error (${res.duration_ms}ms)`;
+          }
+          if (beacon) beacon.className = "compiler-beacon error";
+          if (statusDot) statusDot.className = "status-mini-dot";
+        } else if (res.status === "timeout") {
+          pre.innerHTML += `<span class="output-stderr">✕ Execution timed out (${res.duration_ms}ms)\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status error";
+            statusBadge.textContent = "Timeout";
+          }
+          if (beacon) beacon.className = "compiler-beacon error";
+          if (statusDot) statusDot.className = "status-mini-dot";
+        } else {
+          pre.innerHTML += `<span class="output-stderr">✕ Process exited with code ${res.exit_code} (${res.duration_ms}ms)\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status error";
+            statusBadge.textContent = `Exit: ${res.exit_code} (${res.duration_ms}ms)`;
+          }
+          if (beacon) beacon.className = "compiler-beacon error";
+          if (statusDot) statusDot.className = "status-mini-dot";
+        }
+      }
+    } catch (err) {
+      pre.innerHTML += `<span class="output-stderr">Failed to reach execution runner: ${this._escapeHtml(err.message || String(err))}\n</span>`;
+      if (statusBadge) {
+        statusBadge.className = "compiler-badge status error";
+        statusBadge.textContent = "Error";
+      }
+      if (beacon) beacon.className = "compiler-beacon error";
+    } finally {
+      if (btnRun) btnRun.classList.remove("running");
+      if (runText) runText.textContent = "Run";
+      pre.scrollTop = pre.scrollHeight;
+    }
+  }
+
+  toggleCompilerPanel(forceOpen = null) {
+    const panel = document.getElementById("compilerPanel");
+    const statusBtn = document.getElementById("btnToggleConsoleStatus");
+    if (!panel) return;
+    const isCollapsed = panel.classList.contains("collapsed");
+    const shouldOpen = forceOpen !== null ? forceOpen : isCollapsed;
+    if (shouldOpen) {
+      panel.classList.remove("collapsed");
+      if (statusBtn) statusBtn.classList.add("active");
+    } else {
+      panel.classList.add("collapsed");
+      panel.classList.remove("maximized");
+      if (statusBtn) statusBtn.classList.remove("active");
+    }
+  }
+
+  toggleCompilerMaximize() {
+    const panel = document.getElementById("compilerPanel");
+    if (!panel) return;
+    panel.classList.remove("collapsed");
+    panel.classList.toggle("maximized");
+    const isMax = panel.classList.contains("maximized");
+    const maxIcon = document.getElementById("compilerMaxIcon");
+    if (maxIcon) {
+      maxIcon.innerHTML = isMax ? Icons.minimize : Icons.maximize;
+    }
+  }
+
+  clearCompilerOutput() {
+    const pre = document.getElementById("compilerOutputPre");
+    if (pre) {
+      pre.innerHTML = `<span class="output-dim">Console cleared. Ready for next run.</span>\n`;
+    }
+  }
+
+  toggleStdinBar() {
+    const bar = document.getElementById("compilerStdinBar");
+    if (!bar) return;
+    const isOpen = bar.style.display !== "none";
+    bar.style.display = isOpen ? "none" : "flex";
+    if (!isOpen) {
+      document.getElementById("compilerStdinInput")?.focus();
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Mobile Navigation & Responsive Drawer Helpers
+  // -------------------------------------------------------------
+  toggleMobileNav() {
+    const links = document.getElementById("landingNavLinks");
+    const actions = document.getElementById("landingHeaderActions");
+    if (links) links.classList.toggle("mobile-open");
+    if (actions) actions.classList.toggle("mobile-open");
+  }
+
+  toggleMobileSidebar(forceOpen = null) {
+    const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebarBackdrop");
+    if (!sidebar) return;
+    const isCurrentlyOpen = sidebar.classList.contains("mobile-open");
+    const shouldOpen = forceOpen !== null ? forceOpen : !isCurrentlyOpen;
+    if (shouldOpen) {
+      sidebar.classList.add("mobile-open");
+      if (backdrop) backdrop.classList.add("active");
+    } else {
+      sidebar.classList.remove("mobile-open");
+      if (backdrop) backdrop.classList.remove("active");
+    }
+  }
+
+  _escapeHtml(text) {
+    if (!text) return "";
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   // -------------------------------------------------------------

@@ -153,6 +153,20 @@ export class FriKodeApi {
       })
     });
   }
+
+  async runCode(options = {}) {
+    return this._fetch("/api/run", {
+      method: "POST",
+      body: JSON.stringify({
+        path: options.path || null,
+        code: options.code || null,
+        language: options.language || "auto",
+        stdin: options.stdin || "",
+        user_name: options.userName || "Developer",
+        timeout: options.timeout || 12.0
+      })
+    });
+  }
 }
 
 export const api = new FriKodeApi();

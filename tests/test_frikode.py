@@ -229,6 +229,57 @@ class TestTunnelManager(unittest.TestCase):
         self.assertIsNone(manager.public_url)
 
 
+class TestCodeRunner(unittest.TestCase):
+    def setUp(self):
+        from frikode.runner import CodeRunner
+        self.runner = CodeRunner(".")
+
+    def test_detect_language(self):
+        self.assertEqual(self.runner.detect_language("script.py"), "python")
+        self.assertEqual(self.runner.detect_language("main.c"), "c")
+        self.assertEqual(self.runner.detect_language("algo.cpp"), "cpp")
+        self.assertEqual(self.runner.detect_language("deploy.sh"), "bash")
+        self.assertEqual(self.runner.detect_language("index.js"), "javascript")
+
+    def test_python_execution(self):
+        res = self.runner.run(code="print('FriKode Runner OK')\nprint(10 + 32)", language="python")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["exit_code"], 0)
+        self.assertIn("FriKode Runner OK", res["stdout"])
+        self.assertIn("42", res["stdout"])
+        self.assertGreater(res["duration_ms"], 0)
+
+    def test_python_stdin(self):
+        code = "val = input()\nprint('Input received:', val)"
+        res = self.runner.run(code=code, stdin_data="testing_123", language="python")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Input received: testing_123", res["stdout"])
+
+    def test_python_runtime_error(self):
+        code = "raise ValueError('intentional test error')"
+        res = self.runner.run(code=code, language="python")
+        self.assertEqual(res["status"], "error")
+        self.assertNotEqual(res["exit_code"], 0)
+        self.assertIn("ValueError: intentional test error", res["stderr"])
+
+    def test_c_compilation_and_execution(self):
+        import shutil
+        if not shutil.which("clang") and not shutil.which("gcc"):
+            self.skipTest("C compiler not available")
+
+        c_code = """
+        #include <stdio.h>
+        int main() {
+            printf("C Code Output: %d\\n", 21 * 2);
+            return 0;
+        }
+        """
+        res = self.runner.run(code=c_code, language="c")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("C Code Output: 42", res["stdout"])
+        self.assertEqual(res["exit_code"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
 

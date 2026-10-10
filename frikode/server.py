@@ -18,6 +18,7 @@ from ypy_websocket import WebsocketServer
 import y_py as Y
 
 from .network import get_local_ip_addresses, get_primary_ip, generate_session_code
+from .runner import CodeRunner
 from .tunnel import get_tunnel_manager
 from .workspace import Workspace, WorkspaceSecurityError
 
@@ -67,6 +68,7 @@ class FriKodeServer:
             self.tunnel_manager.set_custom_url(self.public_url)
 
         self.workspace = Workspace(workspace_path)
+        self.code_runner = CodeRunner(self.workspace.root_path)
         self.session_code = generate_session_code()
         self.is_running = False
         self.started_at = time.time()
@@ -111,6 +113,7 @@ class FriKodeServer:
         self.app.router.add_get("/api/ping", self.handle_ping)
         self.app.router.add_get("/api/tunnel", self.handle_get_tunnel)
         self.app.router.add_post("/api/tunnel", self.handle_manage_tunnel)
+        self.app.router.add_post("/api/run", self.handle_run_code)
         
         # Workspace file routes
         self.app.router.add_get("/api/files", self.handle_get_files)
@@ -231,6 +234,7 @@ class FriKodeServer:
         if new_path:
             abs_new_path = os.path.abspath(new_path)
             self.workspace = Workspace(abs_new_path)
+            self.code_runner = CodeRunner(self.workspace.root_path)
 
         if init_sample or self.workspace.is_empty():
             self.workspace.init_sample_project()
@@ -260,6 +264,41 @@ class FriKodeServer:
             "reason": "The host ended this FriKode session."
         })
         return web.json_response({"status": "session_ended"})
+
+    async def handle_run_code(self, request: web.Request) -> web.Response:
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+
+        path = data.get("path")
+        code = data.get("code")
+        language = data.get("language", "auto")
+        stdin_data = data.get("stdin", "")
+        timeout = float(data.get("timeout", 12.0))
+        user_name = data.get("user_name", "Someone")
+
+        res = await asyncio.to_thread(
+            self.code_runner.run,
+            path=path,
+            code=code,
+            language=language,
+            stdin_data=stdin_data,
+            timeout=timeout
+        )
+
+        file_label = res.get("file") or path or "code"
+        await self.broadcast_collaboration({
+            "type": "code_executed",
+            "file": file_label,
+            "language": res.get("language", "code"),
+            "user_name": user_name,
+            "status": res.get("status"),
+            "exit_code": res.get("exit_code"),
+            "duration_ms": res.get("duration_ms", 0),
+        })
+
+        return web.json_response(res)
 
     async def handle_get_files(self, request: web.Request) -> web.Response:
         tree = self.workspace.get_tree()

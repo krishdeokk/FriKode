@@ -6,4 +6,6 @@ __pycache__/
 *.tmp.*
 .frikode_keys/
 *.key
+.frikode_tmp/
+*.out
 

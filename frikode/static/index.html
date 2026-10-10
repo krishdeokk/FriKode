@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <title>FriKode • Local Collaborative Code Editor</title>
 
   <!-- Google Fonts: Inter & Roboto Mono (MailerBot Typography) -->
@@ -36,13 +36,18 @@
           <span class="wordmark-badge">P2P</span>
         </a>
 
-        <nav class="landing-nav-links">
+        <!-- Mobile Navigation Menu Toggle -->
+        <button class="mobile-nav-toggle" id="btnMobileNavToggle" aria-label="Toggle navigation menu">
+          <span id="mobileNavIcon"></span>
+        </button>
+
+        <nav class="landing-nav-links" id="landingNavLinks">
           <a href="#features">Features</a>
           <a href="#how-it-works">How It Works</a>
           <a href="#security">Security</a>
         </nav>
 
-        <div class="landing-header-actions">
+        <div class="landing-header-actions" id="landingHeaderActions">
           <button class="mbot-btn mbot-btn-tan" id="btnNavJoin" style="padding: 8px 18px; font-size: 13px;">
             Join Session
           </button>
@@ -254,6 +259,10 @@
       <!-- Top Navigation Bar -->
       <header class="topbar">
         <div class="topbar-left">
+          <!-- Mobile Sidebar Toggle -->
+          <button class="icon-btn mobile-sidebar-toggle" id="btnToggleMobileSidebar" title="Toggle File Explorer">
+            <span id="mobileSidebarIcon"></span>
+          </button>
           <a href="#" class="mailer-wordmark" id="btnWorkspaceBrand" title="FriKode Home">
             <span>FriKode</span>
             <span class="wordmark-badge">P2P</span>
@@ -309,8 +318,14 @@
             <span id="syncStatusText">Synced</span>
           </div>
 
-          <!-- Save Button (Acid-Lime) -->
-          <button class="mbot-btn mbot-btn-lime" id="btnSaveFile" title="Save file to host (Cmd/Ctrl+S)" style="padding: 6px 14px; font-size: 12px; border-radius: 6px;">
+          <!-- Run / Compile Code Button (Acid-Lime) -->
+          <button class="mbot-btn mbot-btn-lime run-code-btn" id="btnRunCode" title="Run / Compile code (Cmd/Ctrl+Enter)" style="padding: 6px 14px; font-size: 12px; border-radius: 6px;">
+            <span id="runIcon"></span>
+            <span id="runBtnText">Run</span>
+          </button>
+
+          <!-- Save Button (Tan) -->
+          <button class="mbot-btn mbot-btn-tan" id="btnSaveFile" title="Save file to host (Cmd/Ctrl+S)" style="padding: 6px 14px; font-size: 12px; border-radius: 6px;">
             <span id="saveIcon"></span>
             <span>Save</span>
           </button>
@@ -350,6 +365,9 @@
           </div>
         </aside>
 
+        <!-- Mobile Sidebar Backdrop -->
+        <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
         <!-- Center Editor Workspace -->
         <main class="editor-workspace">
           <!-- Tabs Bar -->
@@ -379,10 +397,56 @@
                   <span>Save file to host machine</span>
                 </div>
                 <div class="shortcut-row">
+                  <kbd>Cmd</kbd> + <kbd>Enter</kbd> or <kbd>Ctrl</kbd> + <kbd>Enter</kbd>
+                  <span>Run & compile active code</span>
+                </div>
+                <div class="shortcut-row">
                   <kbd>Live Cursors</kbd>
                   <span>Real-time presence visible on same file</span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- In-Browser Compiler & Execution Terminal Panel -->
+          <div class="compiler-panel collapsed" id="compilerPanel">
+            <div class="compiler-header">
+              <div class="compiler-header-left">
+                <span class="compiler-beacon" id="compilerBeacon"></span>
+                <span class="compiler-title">
+                  <span id="compilerTerminalIcon"></span>
+                  <span>Console &amp; Output</span>
+                </span>
+                <span class="compiler-badge lang" id="compilerLangBadge">PYTHON</span>
+                <span class="compiler-badge status" id="compilerStatusBadge">Ready</span>
+              </div>
+              <div class="compiler-header-right">
+                <button class="compiler-action-btn" id="btnToggleStdin" title="Toggle Standard Input (stdin)">
+                  <span>⌨ Input</span>
+                </button>
+                <button class="compiler-action-btn" id="btnClearOutput" title="Clear console output">
+                  <span id="compilerClearIcon"></span>
+                  <span>Clear</span>
+                </button>
+                <button class="compiler-action-btn" id="btnMaximizeCompiler" title="Maximize/Restore console">
+                  <span id="compilerMaxIcon"></span>
+                </button>
+                <button class="compiler-action-btn" id="btnCloseCompiler" title="Close console">
+                  <span>✕</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Stdin Input Drawer (for interactive programs like input() or scanf()) -->
+            <div class="compiler-stdin-bar" id="compilerStdinBar" style="display: none;">
+              <span class="stdin-prompt">INPUT &gt;</span>
+              <input type="text" class="stdin-input mono" id="compilerStdinInput" placeholder="Standard input (stdin) for script (e.g. values separated by newline)...">
+              <button class="mbot-btn mbot-btn-lime" id="btnRunStdin" style="padding: 4px 10px; font-size: 11px;">Run with Input</button>
+            </div>
+
+            <!-- Terminal Output Area -->
+            <div class="compiler-body" id="compilerBody">
+              <pre class="compiler-output mono" id="compilerOutputPre"><span class="output-dim">⚡ Click "Run" (Cmd+Enter / Ctrl+Enter) to compile and execute active code...</span></pre>
             </div>
           </div>
         </main>
@@ -411,6 +475,11 @@
       <!-- Bottom Status Bar -->
       <footer class="statusbar">
         <div class="statusbar-left">
+          <button class="status-btn" id="btnToggleConsoleStatus" title="Toggle Console &amp; Output (Cmd/Ctrl+Enter)">
+            <span id="statusConsoleIcon"></span>
+            <span>Console</span>
+            <span class="status-mini-dot" id="statusConsoleDot"></span>
+          </button>
           <div class="status-item">
             <span id="statusCursorPos">Ln 1, Col 1</span>
           </div>
