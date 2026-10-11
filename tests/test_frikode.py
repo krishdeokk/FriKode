@@ -192,6 +192,26 @@ class TestFriKodeServerIntegration(unittest.IsolatedAsyncioTestCase):
             data = await res.json()
             self.assertEqual(data.get("public_url"), "https://frikode-demo.koyeb.app")
 
+    async def test_api_tunnel_endpoints(self):
+        # 1. Get status
+        async with self.session.get(f"{self.base_url}/api/tunnel") as res:
+            self.assertEqual(res.status, 200)
+            data = await res.json()
+            self.assertIn("available_providers", data)
+
+        # 2. Set custom URL
+        async with self.session.post(f"{self.base_url}/api/tunnel", json={"action": "set_url", "url": "https://custom.frikode.net"}) as res:
+            self.assertEqual(res.status, 200)
+            data = await res.json()
+            self.assertTrue(data.get("active"))
+            self.assertEqual(data.get("url"), "https://custom.frikode.net")
+
+        # 3. Stop tunnel
+        async with self.session.post(f"{self.base_url}/api/tunnel", json={"action": "stop"}) as res:
+            self.assertEqual(res.status, 200)
+            data = await res.json()
+            self.assertFalse(data.get("active"))
+
 
 class TestTunnelManager(unittest.TestCase):
     def test_tunnel_availability(self):

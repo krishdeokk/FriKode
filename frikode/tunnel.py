@@ -23,8 +23,9 @@ logger = logging.getLogger("frikode.tunnel")
 
 # URL extraction patterns
 REGEX_CLOUDFLARE = re.compile(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com")
-REGEX_PINGGY = re.compile(r"https://[a-zA-Z0-9-]+\.(?:a\.|free\.)?pinggy\.link")
-REGEX_LOCALHOST_RUN = re.compile(r"https://[a-zA-Z0-9-]+\.lhr\.life")
+REGEX_PINGGY = re.compile(r"https://[a-zA-Z0-9.-]*pinggy[a-zA-Z0-9.-]*\.(?:net|link|io)")
+REGEX_LOCALHOST_RUN = re.compile(r"https://[a-zA-Z0-9.-]+\.lhr\.(?:life|pro)")
+REGEX_GENERIC_HTTPS = re.compile(r"https://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?::\d+)?(?:/[^\s]*)?")
 def _get_or_create_ssh_key() -> Optional[str]:
     """
     Returns the path to an SSH private key. If no SSH key exists on the user's
@@ -246,21 +247,27 @@ class TunnelManager:
                 # Check specific regex
                 match = url_regex.search(clean_line)
                 if match:
-                    found_url = match.group(0)
-                    break
+                    candidate = match.group(0).rstrip("/")
+                    if "dashboard.pinggy" not in candidate and candidate != "https://pinggy.io":
+                        found_url = candidate
+                        break
 
                 # Secondary generic check if pinggy/localhost.run printed a banner
                 if "pinggy" in provider and "https://" in clean_line:
-                    gen_match = REGEX_GENERIC_HTTPS.search(clean_line)
-                    if gen_match and "pinggy" in gen_match.group(0):
-                        found_url = gen_match.group(0)
-                        break
+                    gen_match = REGEX_PINGGY.search(clean_line) or REGEX_GENERIC_HTTPS.search(clean_line)
+                    if gen_match:
+                        candidate = gen_match.group(0).rstrip("/")
+                        if "pinggy" in candidate and "dashboard.pinggy" not in candidate and candidate != "https://pinggy.io":
+                            found_url = candidate
+                            break
 
                 if "localhost.run" in provider and "https://" in clean_line:
-                    gen_match = REGEX_GENERIC_HTTPS.search(clean_line)
-                    if gen_match and "lhr.life" in gen_match.group(0):
-                        found_url = gen_match.group(0)
-                        break
+                    gen_match = REGEX_LOCALHOST_RUN.search(clean_line) or REGEX_GENERIC_HTTPS.search(clean_line)
+                    if gen_match:
+                        candidate = gen_match.group(0).rstrip("/")
+                        if "lhr.life" in candidate or "localhost.run" in candidate:
+                            found_url = candidate
+                            break
 
             if found_url:
                 # Start background log consumer thread to keep pipes clear

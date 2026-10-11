@@ -140,7 +140,7 @@ export class FriKodeApi {
         action: "start",
         provider
       })
-    });
+    }, 25000);
   }
 
   async stopTunnel() {
@@ -149,7 +149,7 @@ export class FriKodeApi {
       body: JSON.stringify({
         action: "stop"
       })
-    });
+    }, 10000);
   }
 
   async setCustomTunnelUrl(url) {

@@ -161,47 +161,53 @@ class FriKodeServer:
 
     async def handle_manage_tunnel(self, request: web.Request) -> web.Response:
         try:
-            data = await request.json()
-        except Exception:
-            data = {}
+            try:
+                data = await request.json()
+            except Exception:
+                data = {}
 
-        action = data.get("action", "status")
-        provider = data.get("provider", "auto")
+            action = data.get("action", "status")
+            provider = data.get("provider", "auto")
 
-        if action == "start":
-            url = await asyncio.to_thread(self.tunnel_manager.start, provider=provider)
-            if url:
-                self.public_url = url
+            if action == "start":
+                url = await asyncio.to_thread(self.tunnel_manager.start, provider=provider)
+                if url:
+                    self.public_url = url
+                status = self.tunnel_manager.get_status()
+                await self.broadcast_collaboration({
+                    "type": "tunnel_update",
+                    "tunnel": status
+                })
+                return web.json_response(status)
+
+            elif action == "stop":
+                await asyncio.to_thread(self.tunnel_manager.stop)
+                self.public_url = None
+                status = self.tunnel_manager.get_status()
+                await self.broadcast_collaboration({
+                    "type": "tunnel_update",
+                    "tunnel": status
+                })
+                return web.json_response(status)
+
+            elif action == "set_url":
+                custom_url = data.get("url", "").strip()
+                if custom_url:
+                    url = self.tunnel_manager.set_custom_url(custom_url)
+                    self.public_url = url
+                status = self.tunnel_manager.get_status()
+                await self.broadcast_collaboration({
+                    "type": "tunnel_update",
+                    "tunnel": status
+                })
+                return web.json_response(status)
+
+            return web.json_response(self.tunnel_manager.get_status())
+        except Exception as e:
+            logger.error(f"Error handling tunnel management: {e}", exc_info=True)
             status = self.tunnel_manager.get_status()
-            await self.broadcast_collaboration({
-                "type": "tunnel_update",
-                "tunnel": status
-            })
+            status["error"] = str(e)
             return web.json_response(status)
-
-        elif action == "stop":
-            await asyncio.to_thread(self.tunnel_manager.stop)
-            self.public_url = None
-            status = self.tunnel_manager.get_status()
-            await self.broadcast_collaboration({
-                "type": "tunnel_update",
-                "tunnel": status
-            })
-            return web.json_response(status)
-
-        elif action == "set_url":
-            custom_url = data.get("url", "").strip()
-            if custom_url:
-                url = self.tunnel_manager.set_custom_url(custom_url)
-                self.public_url = url
-            status = self.tunnel_manager.get_status()
-            await self.broadcast_collaboration({
-                "type": "tunnel_update",
-                "tunnel": status
-            })
-            return web.json_response(status)
-
-        return web.json_response(self.tunnel_manager.get_status())
 
     async def handle_get_session(self, request: web.Request) -> web.Response:
         try:

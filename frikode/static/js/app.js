@@ -288,9 +288,9 @@ class FriKodeApp {
       console.warn("[FriKode] Session retry error:", e);
     }
 
-    // 7. Check URL parameters for 1-click invite (?join=1 or ?code=FRI-XXXX)
+    // 7. Check URL parameters for 1-click invite (?join=1, ?room=..., ?session=..., ?code=...)
     const urlParams = new URLSearchParams(window.location.search);
-    const codeParam = urlParams.get("code") || urlParams.get("session");
+    const codeParam = urlParams.get("code") || urlParams.get("session") || urlParams.get("room");
     const joinParam = urlParams.get("join");
     if (codeParam || joinParam) {
       setTimeout(() => {
@@ -763,16 +763,27 @@ class FriKodeApp {
       await this.enterWorkspace();
       showToast(`Workspace "${ws.name}" created!`, "success");
 
-      if (enableTunnel && !this.tunnelActive && !isStandaloneStatic) {
-        showToast("Starting remote access link...", "info");
-        api.startTunnel("auto").then(t => {
-          this._updateTunnelUI(t);
-          if (t && t.active && t.url) {
-            showToast("Remote link ready: " + t.url, "success");
-          }
-        }).catch(err => {
-          console.warn("Tunnel auto-start failed:", err);
-        });
+      if (enableTunnel && !this.tunnelActive) {
+        if (isStandaloneStatic) {
+          const inviteUrl = this._getInviteUrl();
+          this._updateTunnelUI({
+            active: true,
+            url: inviteUrl,
+            provider: "Web / GitHub Pages",
+            error: null
+          });
+          showToast("Remote link ready: " + inviteUrl, "success");
+        } else {
+          showToast("Starting remote access link...", "info");
+          api.startTunnel("auto").then(t => {
+            this._updateTunnelUI(t);
+            if (t && t.active && t.url) {
+              showToast("Remote link ready: " + t.url, "success");
+            }
+          }).catch(err => {
+            console.warn("Tunnel auto-start failed:", err);
+          });
+        }
       }
     } catch (err) {
       console.error("Error creating workspace:", err);
@@ -992,8 +1003,17 @@ class FriKodeApp {
     const label = document.getElementById("joinRemoteHostLabel");
     const hostInput = document.getElementById("joinHostInput");
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const codeParam = urlParams.get("code") || urlParams.get("session") || urlParams.get("room");
+
     // Pre-fill active session code or remote link
-    if (this.session?.session_code) {
+    if (codeParam) {
+      hostInput.value = codeParam;
+      if (helper && label) {
+        helper.style.display = "block";
+        label.textContent = `Invite Code: ${codeParam}`;
+      }
+    } else if (this.session?.session_code) {
       hostInput.value = this.session.session_code;
       if (helper && label) {
         helper.style.display = "block";
@@ -1913,6 +1933,21 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   // -------------------------------------------------------------
   async openRemoteModal() {
     this.openModal("remoteModal");
+    const isStandaloneStatic = window.location.hostname.endsWith("github.io") || (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1") && !api.baseUrl);
+    if (isStandaloneStatic) {
+      const inviteUrl = this._getInviteUrl();
+      this._updateTunnelUI({
+        active: true,
+        url: inviteUrl,
+        provider: "Web / GitHub Pages",
+        error: null
+      });
+      const modalStatusDesc = document.getElementById("modalRemoteStatusDesc");
+      if (modalStatusDesc) {
+        modalStatusDesc.textContent = "You are running FriKode in the browser! Your workspace connects via global WebSocket relay. Anyone worldwide can join using your direct link below.";
+      }
+      return;
+    }
     try {
       const tunnel = await api.getTunnel();
       this._updateTunnelUI(tunnel);
@@ -1922,6 +1957,20 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   }
 
   async toggleTunnel() {
+    const isStandaloneStatic = window.location.hostname.endsWith("github.io") || (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1") && !api.baseUrl);
+    if (isStandaloneStatic) {
+      const inviteUrl = this._getInviteUrl();
+      this._updateTunnelUI({
+        active: true,
+        url: inviteUrl,
+        provider: "Web / GitHub Pages",
+        error: null
+      });
+      copyToClipboard(inviteUrl, "Remote collaboration link copied!");
+      showToast("Web collaboration link ready! Share with teammates.", "success");
+      return;
+    }
+
     const btnAction = document.getElementById("btnToggleTunnelAction");
     const btnText = document.getElementById("btnToggleTunnelText");
     const origText = btnText ? btnText.textContent : "";
@@ -1936,12 +1985,20 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       } else {
         if (btnText) btnText.textContent = "Starting...";
         const provider = document.getElementById("selectTunnelProvider")?.value || "auto";
-        const res = await api.startTunnel(provider);
+        let res;
+        try {
+          res = await api.startTunnel(provider);
+        } catch (apiErr) {
+          console.warn("Tunnel start API error, checking status fallback:", apiErr);
+          res = await api.getTunnel().catch(() => ({ active: false, error: apiErr.message }));
+        }
         this._updateTunnelUI(res);
-        if (res.active && res.url) {
+        if (res && res.active && res.url) {
           showToast("Remote link ready! Share the link with teammates.", "success");
-        } else if (res.error) {
+        } else if (res && res.error) {
           showToast(`Tunnel notice: ${res.error}`, "info");
+        } else {
+          showToast("Could not establish tunnel. You can enter a custom URL below or check internet.", "info");
         }
       }
     } catch (err) {
@@ -1980,6 +2037,18 @@ You are currently viewing FriKode hosted live on GitHub Pages!
     const url = input?.value?.trim();
     if (!url) {
       showToast("Please enter a valid URL (e.g. https://yourname.ngrok.app)", "error");
+      return;
+    }
+    const isStandaloneStatic = window.location.hostname.endsWith("github.io") || (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1") && !api.baseUrl);
+    if (isStandaloneStatic) {
+      this._updateTunnelUI({
+        active: true,
+        url: url,
+        provider: "custom",
+        error: null
+      });
+      showToast("Custom remote URL applied!", "success");
+      if (input) input.value = "";
       return;
     }
     try {
