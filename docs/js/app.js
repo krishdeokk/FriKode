@@ -67,10 +67,22 @@ class WorkspaceStore {
     this.saveAll(all);
   }
 
-  createWorkspace(name, template = "python") {
+  getWorkspaceByCode(code) {
+    if (!code) return null;
+    const clean = code.toUpperCase().replace(/^FRI-/, "");
+    const all = this.getAll();
+    for (const ws of Object.values(all)) {
+      if (ws.session_code && ws.session_code.toUpperCase().replace(/^FRI-/, "") === clean) {
+        return ws;
+      }
+    }
+    return null;
+  }
+
+  createWorkspace(name, template = "python", customSessionCode = null) {
     const all = this.getAll();
     const id = "ws_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6);
-    const sessionCode = "FRI-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+    const sessionCode = customSessionCode || ("FRI-" + Math.random().toString(36).substring(2, 6).toUpperCase());
     name = (name || "").trim() || "My Workspace";
 
     let files = {};
@@ -1023,10 +1035,10 @@ class FriKodeApp {
       }
     } else if (isGitHubPages) {
       hostInput.value = "";
-      hostInput.placeholder = "e.g. https://...pinggy.link or 192.168.1.5:4000";
+      hostInput.placeholder = "e.g. FRI-W49Q or https://...pinggy.link";
       if (helper && label) {
         helper.style.display = "block";
-        label.textContent = "Enter your live FriKode host URL or Wi-Fi IP to connect";
+        label.textContent = "Enter your teammate's session code (e.g. FRI-W49Q) or live host URL";
       }
     } else if (isRemote) {
       hostInput.value = window.location.origin;
@@ -1054,10 +1066,14 @@ class FriKodeApp {
     let targetUrl;
 
     if (isCode) {
-      if (isGitHubPages) {
-        feedback.style.background = "rgba(244, 63, 94, 0.15)";
-        feedback.style.color = "#fda4af";
-        feedback.textContent = `✕ On GitHub Pages, please enter the full host address (e.g. https://...pinggy.link or http://192.168.1.5:4000).`;
+      const cleanCode = rawInput 
+        ? (rawInput.toUpperCase().startsWith("FRI-") ? rawInput.toUpperCase() : `FRI-${rawInput.toUpperCase()}`)
+        : (this.session?.session_code || "FRI-PEER");
+
+      if (isGitHubPages || !api.baseUrl) {
+        feedback.style.background = "rgba(16, 185, 129, 0.15)";
+        feedback.style.color = "#6ee7b7";
+        feedback.textContent = `✓ Session code "${cleanCode}" valid! Click 'Connect & Join' below to join in-browser collaboration.`;
         return;
       }
       targetUrl = window.location.origin;
@@ -1100,10 +1116,40 @@ class FriKodeApp {
       let targetUrl;
 
       if (isCode) {
-        if (isGitHubPages) {
-          showToast("On GitHub Pages, please enter your Host address (e.g. https://...pinggy.link or http://192.168.1.5:4000).", "error");
+        const cleanCode = rawInput 
+          ? (rawInput.toUpperCase().startsWith("FRI-") ? rawInput.toUpperCase() : `FRI-${rawInput.toUpperCase()}`)
+          : (this.session?.session_code || "FRI-PEER");
+
+        this.user.name = nameInput;
+        safeSetStorage("frikode_name", nameInput);
+        this.role = "participant";
+
+        // If on GitHub Pages or standalone static web mode:
+        // Connect to the room directly without needing a local Python server!
+        if (isGitHubPages || !api.baseUrl) {
+          let ws = this.workspaceStore.getWorkspaceByCode(cleanCode);
+          if (!ws) {
+            ws = this.workspaceStore.createWorkspace(`Session ${cleanCode}`, "python", cleanCode);
+          } else {
+            this.workspaceStore.setActiveId(ws.id);
+          }
+
+          this.session = {
+            session_code: cleanCode,
+            workspace_name: ws.name,
+            role: "participant",
+            primary_ip: "web",
+            port: 4000
+          };
+
+          this.editorManager?.setUser(this.user.name, this.user.color);
+          this.editorManager?.setSessionCode(cleanCode);
+          this.closeModal("joinModal");
+          await this.enterWorkspace();
+          showToast(`Joined session "${cleanCode}" as ${this.user.name}!`, "success");
           return;
         }
+
         targetUrl = window.location.origin;
         if (rawInput && this.session?.session_code) {
           const cleanEntered = rawInput.toUpperCase().replace(/^FRI-/, "");
@@ -1248,9 +1294,15 @@ class FriKodeApp {
     }
 
     // Load from local WorkspaceStore
-    let activeWs = this.workspaceStore.getActiveWorkspace();
+    let activeWs = null;
+    if (this.session?.session_code) {
+      activeWs = this.workspaceStore.getWorkspaceByCode(this.session.session_code);
+    }
     if (!activeWs) {
-      activeWs = this.workspaceStore.createWorkspace("My Project", "python");
+      activeWs = this.workspaceStore.getActiveWorkspace();
+    }
+    if (!activeWs) {
+      activeWs = this.workspaceStore.createWorkspace("My Project", "python", this.session?.session_code);
     }
     if (this.session) {
       this.session.workspace_name = activeWs.name;
