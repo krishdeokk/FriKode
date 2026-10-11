@@ -3,6 +3,8 @@
  * Handles view switching, session management, file tree, signaling, and presence.
  */
 
+import * as Y from "../vendor/yjs.bundle.mjs";
+import { WebsocketProvider } from "../vendor/y-websocket.bundle.mjs";
 import { api } from "./api.js";
 import { EditorManager } from "./editor.js";
 import { Icons, getFileIcon } from "./icons.js";
@@ -249,12 +251,17 @@ class FriKodeApp {
 
     this.tunnelActive = false;
     this.tunnelUrl = null;
+    this._presenceProvider = null;
 
     // Pending file action state (for modals)
     this.pendingCreateType = "file"; // "file" or "folder"
     this.pendingDeletePath = null;
 
     this.init();
+  }
+
+  _isStaticMode() {
+    return (window.location.hostname.endsWith("github.io") || window.location.protocol === "file:") && !api.baseUrl;
   }
 
   async init() {
@@ -424,10 +431,17 @@ class FriKodeApp {
             this._notifyFileFocus(null);
           }
         }
+        if (this._presenceProvider && this._presenceProvider.awareness) {
+          this._presenceProvider.awareness.setLocalStateField("user", {
+            name: this.user.name,
+            color: this.user.color,
+            role: this.role,
+            file: tabInfo ? tabInfo.path : ""
+          });
+        }
       },
       onAwarenessChange: (states) => {
-        const isStandaloneStatic = window.location.hostname.endsWith("github.io") || !api.baseUrl;
-        if (isStandaloneStatic) {
+        if (this._isStaticMode()) {
           this._handleAwarenessPeers(states);
         }
       },
@@ -746,7 +760,7 @@ class FriKodeApp {
       this.user.name = hostName;
       safeSetStorage("frikode_name", hostName);
 
-      const isStandaloneStatic = window.location.hostname.endsWith("github.io") || !api.baseUrl;
+      const isStandaloneStatic = this._isStaticMode();
 
       // 1. If backend exists, create session on backend
       if (!isStandaloneStatic) {
@@ -984,19 +998,60 @@ class FriKodeApp {
     if (!states || states.length === 0) return;
     const peerMap = new Map();
     states.forEach((s) => {
-      if (s.user && s.user.name) {
-        const peerId = `p2p_${s.user.name}_${s.user.color}`;
-        peerMap.set(peerId, {
-          id: peerId,
-          name: s.user.name,
-          color: s.user.color || "#22d3ee",
-          role: s.user.name === this.user.name ? this.role : "peer",
-          active_file: this.editorManager?.getActiveFile() || ""
-        });
-      }
+      const clientKey = s.isLocal ? this.user.id : (s.clientId ? `client_${s.clientId}` : (s.user?.id || `p2p_${s.user?.name}_${s.user?.color}`));
+      const userName = s.user?.name || (s.isLocal ? this.user.name : "Collaborator");
+      const userColor = s.user?.color || (s.isLocal ? this.user.color : "#38bdf8");
+      const role = s.isLocal ? this.role : (s.user?.role || (this.role === "host" ? "peer" : "host"));
+      peerMap.set(clientKey, {
+        id: clientKey,
+        clientId: s.clientId,
+        name: userName,
+        color: userColor,
+        role: role,
+        isLocal: !!s.isLocal,
+        active_file: s.user?.file || (s.isLocal ? this.editorManager?.getActiveFile() || "" : "")
+      });
     });
     this.peers = Array.from(peerMap.values());
     this._renderPeers();
+  }
+
+  _connectStaticPresence(code) {
+    if (this._presenceProvider) {
+      try {
+        this._presenceProvider.destroy();
+      } catch (_) {}
+      this._presenceProvider = null;
+    }
+    try {
+      const cleanCode = (code || "FRI-PEER").toUpperCase().trim().replace(/^FRI-/, "FRI-");
+      const wsUrl = "wss://demos.yjs.dev/ws";
+      const roomName = `frikode-${cleanCode}-presence`;
+      const doc = new Y.Doc();
+      this._presenceProvider = new WebsocketProvider(wsUrl, roomName, doc, { connect: true });
+
+      const currentFile = this.editorManager?.getActiveFile() || "";
+      this._presenceProvider.awareness.setLocalStateField("user", {
+        name: this.user.name,
+        color: this.user.color,
+        role: this.role,
+        file: currentFile
+      });
+
+      this._presenceProvider.awareness.on("change", () => {
+        const states = [];
+        this._presenceProvider.awareness.getStates().forEach((state, clientId) => {
+          states.push({
+            clientId,
+            isLocal: clientId === this._presenceProvider.awareness.clientID,
+            ...state
+          });
+        });
+        this._handleAwarenessPeers(states);
+      });
+    } catch (err) {
+      console.warn("[FriKode] Static presence relay error:", err);
+    }
   }
 
   // -------------------------------------------------------------
@@ -1005,7 +1060,14 @@ class FriKodeApp {
   openJoinModal() {
     const nameInput = document.getElementById("joinNameInput");
     if (nameInput) {
-      nameInput.value = safeGetStorage("frikode_name", "");
+      const stored = safeGetStorage("frikode_name", "");
+      nameInput.value = (stored && stored !== "Developer") ? stored : "Guest_" + Math.floor(100 + Math.random() * 900);
+    }
+    // Assign a distinct color for joining so it doesn't collide with host
+    this.user.color = getRandomColor();
+    safeSetStorage("frikode_color", this.user.color);
+    if (this.editorManager) {
+      this.editorManager.setUser(this.user.name, this.user.color);
     }
     document.getElementById("joinFeedbackBox").style.display = "none";
 
@@ -1038,7 +1100,7 @@ class FriKodeApp {
       hostInput.placeholder = "e.g. FRI-W49Q or https://...pinggy.link";
       if (helper && label) {
         helper.style.display = "block";
-        label.textContent = "Enter your teammate's session code (e.g. FRI-W49Q) or live host URL";
+        label.textContent = "Enter 6-letter Session Code (for Web workspaces) or full Remote Tunnel link (for Python/CLI host)";
       }
     } else if (isRemote) {
       hostInput.value = window.location.origin;
@@ -1126,7 +1188,7 @@ class FriKodeApp {
 
         // If on GitHub Pages or standalone static web mode:
         // Connect to the room directly without needing a local Python server!
-        if (isGitHubPages || !api.baseUrl) {
+        if (this._isStaticMode()) {
           let ws = this.workspaceStore.getWorkspaceByCode(cleanCode);
           if (!ws) {
             ws = this.workspaceStore.createWorkspace(`Session ${cleanCode}`, "python", cleanCode);
@@ -1201,6 +1263,9 @@ class FriKodeApp {
   async enterWorkspace() {
     this.switchView("workspaceView");
 
+    // Clean up any stale tabs from previous workspace session
+    this.editorManager?.closeAllTabs();
+
     // Update Topbar UI
     document.getElementById("topbarProjectName").textContent = this.session?.workspace_name || "Workspace";
     const roleBadge = document.getElementById("topbarRoleBadge");
@@ -1215,11 +1280,16 @@ class FriKodeApp {
 
     this._updateUserProfileButton();
 
-    // Connect Signaling WebSocket safely
-    try {
-      this._connectSignaling();
-    } catch (wsErr) {
-      console.warn("Signaling initialization warning:", wsErr);
+    if (this._isStaticMode()) {
+      const sessionCode = this.session?.session_code || "FRI-PEER";
+      this._connectStaticPresence(sessionCode);
+    } else {
+      // Connect Signaling WebSocket safely
+      try {
+        this._connectSignaling();
+      } catch (wsErr) {
+        console.warn("Signaling initialization warning:", wsErr);
+      }
     }
 
     // Load workspace files safely
@@ -1279,7 +1349,7 @@ class FriKodeApp {
   }
 
   async loadFiles() {
-    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+    const isStandaloneStatic = this._isStaticMode();
     if (!isStandaloneStatic) {
       try {
         const res = await api.getFiles();
@@ -1481,8 +1551,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       this.signalingWs.close();
     }
 
-    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
-    if (isStandaloneStatic) {
+    if (this._isStaticMode()) {
       document.getElementById("reconnectingBanner").style.display = "none";
       return;
     }
@@ -1887,7 +1956,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
     }
 
     const isFolder = this.pendingCreateType === "folder";
-    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+    const isStandaloneStatic = this._isStaticMode();
 
     if (!isStandaloneStatic) {
       try {
@@ -1934,7 +2003,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   async confirmDeleteEntry() {
     if (!this.pendingDeletePath) return;
 
-    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+    const isStandaloneStatic = this._isStaticMode();
 
     if (!isStandaloneStatic) {
       try {
@@ -1964,18 +2033,28 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   // Session Exit
   // -------------------------------------------------------------
   async leaveSession() {
+    const doLeave = () => {
+      if (this._presenceProvider) {
+        try {
+          this._presenceProvider.destroy();
+        } catch (_) {}
+        this._presenceProvider = null;
+      }
+      this.editorManager?.closeAllTabs();
+      if (this.signalingWs) this.signalingWs.close();
+      this.switchView("homeView");
+    };
+
     if (this.role === "host") {
       if (confirm("End this FriKode session for all participants?")) {
         try {
           await api.endSession();
         } catch (_) {}
-        if (this.signalingWs) this.signalingWs.close();
-        this.switchView("homeView");
+        doLeave();
       }
     } else {
       if (confirm("Leave this collaborative session?")) {
-        if (this.signalingWs) this.signalingWs.close();
-        this.switchView("homeView");
+        doLeave();
       }
     }
   }
@@ -1985,7 +2064,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   // -------------------------------------------------------------
   async openRemoteModal() {
     this.openModal("remoteModal");
-    const isStandaloneStatic = window.location.hostname.endsWith("github.io") || (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1") && !api.baseUrl);
+    const isStandaloneStatic = this._isStaticMode();
     if (isStandaloneStatic) {
       const inviteUrl = this._getInviteUrl();
       this._updateTunnelUI({
@@ -2009,7 +2088,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   }
 
   async toggleTunnel() {
-    const isStandaloneStatic = window.location.hostname.endsWith("github.io") || (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1") && !api.baseUrl);
+    const isStandaloneStatic = this._isStaticMode();
     if (isStandaloneStatic) {
       const inviteUrl = this._getInviteUrl();
       this._updateTunnelUI({
@@ -2091,7 +2170,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       showToast("Please enter a valid URL (e.g. https://yourname.ngrok.app)", "error");
       return;
     }
-    const isStandaloneStatic = window.location.hostname.endsWith("github.io") || (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1") && !api.baseUrl);
+    const isStandaloneStatic = this._isStaticMode();
     if (isStandaloneStatic) {
       this._updateTunnelUI({
         active: true,
@@ -2358,7 +2437,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
         }
       }
     } catch (err) {
-      const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+      const isStandaloneStatic = this._isStaticMode();
       const isJs = activePath?.endsWith(".js") || activePath?.endsWith(".html");
       if (isJs) {
         pre.innerHTML += `<span class="output-dim">[Browser JS Engine] Running JavaScript in sandbox...\n</span>`;
@@ -2620,8 +2699,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
 
   _startPingMonitor() {
     if (this.pingInterval) clearInterval(this.pingInterval);
-    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
-    if (isStandaloneStatic) {
+    if (this._isStaticMode()) {
       const pingText = document.getElementById("statusPingText");
       if (pingText) pingText.textContent = `Live Web Demo`;
       return;

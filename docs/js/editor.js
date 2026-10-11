@@ -41,6 +41,14 @@ export class EditorManager {
     this.sessionCode = code;
   }
 
+  getActiveFile() {
+    return this.activePath || "";
+  }
+
+  _isStaticMode() {
+    return (window.location.hostname.endsWith("github.io") || window.location.protocol === "file:") && !api.baseUrl;
+  }
+
   setUser(name, color) {
     this.user.name = name;
     this.user.color = color;
@@ -156,9 +164,6 @@ export class EditorManager {
     // Initialize Yjs CRDT room for this file
     const ydoc = new Y.Doc();
     const ytext = ydoc.getText("content");
-    if (content && ytext.toString() === "") {
-      ytext.insert(0, content);
-    }
 
     // Establish WebSocket provider to server room
     let host = window.location.host;
@@ -171,30 +176,59 @@ export class EditorManager {
       } catch (_) {}
     }
 
-    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+    const isStandaloneStatic = this._isStaticMode();
     let wsUrl, roomName;
+    const cleanPath = path.replace(/^\.\//, "").trim();
     if (isStandaloneStatic) {
       // Connect to public demo relay for peer-to-peer real-time sync with teammates
       wsUrl = "wss://demos.yjs.dev/ws";
-      const code = this.sessionCode || "public-room";
-      roomName = `frikode-${code}-${path}`;
+      const cleanCode = (this.sessionCode || "public-room").toUpperCase().trim().replace(/^FRI-/, "FRI-");
+      roomName = `frikode-${cleanCode}-${cleanPath}`;
     } else {
       wsUrl = `${protocol}//${host}/ws/yjs`;
-      roomName = path;
+      roomName = cleanPath;
     }
 
     const provider = new WebsocketProvider(wsUrl, roomName, ydoc, { connect: true });
 
-    // Set user awareness (presence name and cursor color)
+    // Populate initial content safely:
+    // If room already has text from teammates, keep teammates' text!
+    // Only insert initialContent if the document is genuinely empty once synced.
+    let initialApplied = false;
+    const applyInitial = () => {
+      if (!initialApplied && content && ytext.toString() === "") {
+        initialApplied = true;
+        ytext.insert(0, content);
+      }
+    };
+
+    provider.on("sync", (isSynced) => {
+      if (isSynced) {
+        applyInitial();
+      }
+    });
+
+    // Fallback if offline or standalone room doesn't emit sync within 1.2s
+    setTimeout(applyInitial, 1200);
+
+    // Set user awareness (presence name, cursor color, and active file)
     provider.awareness.setLocalStateField("user", {
       name: this.user.name,
-      color: this.user.color
+      color: this.user.color,
+      file: cleanPath
     });
 
     provider.awareness.on("change", () => {
       if (this.onAwarenessChange) {
-        const states = Array.from(provider.awareness.getStates().values());
-        this.onAwarenessChange(states);
+        const states = [];
+        provider.awareness.getStates().forEach((state, clientId) => {
+          states.push({
+            clientId,
+            isLocal: clientId === provider.awareness.clientID,
+            ...state
+          });
+        });
+        this.onAwarenessChange(states, provider.awareness);
       }
     });
 
@@ -248,7 +282,6 @@ export class EditorManager {
     this._updateActiveTabUI();
     this.breadcrumb.textContent = path;
     this.cm.refresh();
-    this.cm.focus();
 
     // Notify listeners
     this.onTabChange({ path, mode: tab.mode, dirty: tab.dirty });
@@ -256,6 +289,16 @@ export class EditorManager {
 
     const cursor = this.cm.getCursor();
     this.onCursorChange({ line: cursor.line + 1, col: cursor.ch + 1 });
+
+    // Focus editor and emit initial cursor coordinates to peers
+    setTimeout(() => {
+      if (this.cm && tab.binding) {
+        this.cm.focus();
+        try {
+          tab.binding.emit("cursorActivity", [this.cm]);
+        } catch (_) {}
+      }
+    }, 60);
   }
 
   closeTab(path, event = null) {
@@ -312,7 +355,7 @@ export class EditorManager {
 
     try {
       const text = this.cm.getValue();
-      const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+      const isStandaloneStatic = this._isStaticMode();
       if (!isStandaloneStatic) {
         await api.saveFile(this.activePath, text, this.user.name);
       }
@@ -323,7 +366,7 @@ export class EditorManager {
         this.onFileSave(this.activePath, text);
       }
     } catch (err) {
-      const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+      const isStandaloneStatic = this._isStaticMode();
       if (isStandaloneStatic) {
         tab.dirty = false;
         this._updateTabUI(this.activePath);
