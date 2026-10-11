@@ -501,6 +501,7 @@ class FriKodeApp {
     }
     document.getElementById("joinFeedbackBox").style.display = "none";
 
+    const isGitHubPages = window.location.hostname.endsWith("github.io");
     const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
     const helper = document.getElementById("joinRemoteHelper");
     const label = document.getElementById("joinRemoteHostLabel");
@@ -514,6 +515,13 @@ class FriKodeApp {
         const code = this.session.session_code;
         const wsName = this.session.workspace_name || "Workspace";
         label.textContent = `${code} (${wsName})`;
+      }
+    } else if (isGitHubPages) {
+      hostInput.value = "";
+      hostInput.placeholder = "e.g. https://...pinggy.link or 192.168.1.5:4000";
+      if (helper && label) {
+        helper.style.display = "block";
+        label.textContent = "Enter your live FriKode host URL or Wi-Fi IP to connect";
       }
     } else if (isRemote) {
       hostInput.value = window.location.origin;
@@ -536,10 +544,17 @@ class FriKodeApp {
     const feedback = document.getElementById("joinFeedbackBox");
     feedback.style.display = "block";
 
+    const isGitHubPages = window.location.hostname.endsWith("github.io");
     const isCode = !rawInput || (/^(FRI-)?[A-Za-z0-9]{4,8}$/i.test(rawInput) && !rawInput.includes(".") && !rawInput.includes(":") && !rawInput.includes("/"));
     let targetUrl;
 
     if (isCode) {
+      if (isGitHubPages) {
+        feedback.style.background = "rgba(244, 63, 94, 0.15)";
+        feedback.style.color = "#fda4af";
+        feedback.textContent = `✕ On GitHub Pages, please enter the full host address (e.g. https://...pinggy.link or http://192.168.1.5:4000).`;
+        return;
+      }
       targetUrl = window.location.origin;
     } else {
       targetUrl = this._normalizeAddress(rawInput);
@@ -575,10 +590,15 @@ class FriKodeApp {
       const rawInput = document.getElementById("joinHostInput").value.trim();
       const nameInput = document.getElementById("joinNameInput").value.trim() || "Participant";
 
+      const isGitHubPages = window.location.hostname.endsWith("github.io");
       const isCode = !rawInput || (/^(FRI-)?[A-Za-z0-9]{4,8}$/i.test(rawInput) && !rawInput.includes(".") && !rawInput.includes(":") && !rawInput.includes("/"));
       let targetUrl;
 
       if (isCode) {
+        if (isGitHubPages) {
+          showToast("On GitHub Pages, please enter your Host address (e.g. https://...pinggy.link or http://192.168.1.5:4000).", "error");
+          return;
+        }
         targetUrl = window.location.origin;
         if (rawInput && this.session?.session_code) {
           const cleanEntered = rawInput.toUpperCase().replace(/^FRI-/, "");
@@ -671,27 +691,27 @@ class FriKodeApp {
 
   _openDefaultFile() {
     // Look for README.md or main.py
-    const findFile = (items) => {
+    const findNode = (items) => {
       for (const item of items) {
         if (!item.is_dir) {
           if (item.name.toLowerCase() === "readme.md" || item.name.toLowerCase() === "main.py") {
-            return item.path;
+            return item;
           }
         }
         if (item.children) {
-          const found = findFile(item.children);
+          const found = findNode(item.children);
           if (found) return found;
         }
       }
       return null;
     };
 
-    let targetPath = findFile(this.treeData);
-    if (!targetPath && this.treeData.length > 0) {
+    let targetNode = findNode(this.treeData);
+    if (!targetNode && this.treeData.length > 0) {
       // Pick first non-directory
       const pickFirst = (items) => {
         for (const item of items) {
-          if (!item.is_dir) return item.path;
+          if (!item.is_dir) return item;
           if (item.children) {
             const p = pickFirst(item.children);
             if (p) return p;
@@ -699,11 +719,11 @@ class FriKodeApp {
         }
         return null;
       };
-      targetPath = pickFirst(this.treeData);
+      targetNode = pickFirst(this.treeData);
     }
 
-    if (targetPath) {
-      this.editorManager.openFile(targetPath);
+    if (targetNode) {
+      this.editorManager.openFile(targetNode.path, targetNode.content !== undefined ? targetNode.content : null);
     }
   }
 
@@ -713,9 +733,88 @@ class FriKodeApp {
       this.treeData = res.tree || [];
       this._renderFileTree();
     } catch (err) {
-      console.error("Failed to load file tree:", err);
-      showToast("Failed to refresh file tree", "error");
+      console.warn("Could not load backend file tree:", err);
+      // Fallback for standalone/GitHub Pages demo mode!
+      if (!this.session || window.location.hostname.endsWith("github.io")) {
+        this._loadDemoWorkspace();
+      } else {
+        showToast("Failed to refresh file tree", "error");
+      }
     }
+  }
+
+  _loadDemoWorkspace() {
+    this.treeData = [
+      {
+        path: "main.py",
+        name: "main.py",
+        is_dir: false,
+        size: 380,
+        content: `# FriKode • Collaborative Code Editor
+# Real-Time CRDT Sync with Zero Cloud Servers
+
+import sys
+
+def main():
+    print("Welcome to FriKode Live Web Demo!")
+    print("1. Edit any file in the workspace.")
+    print("2. Press Cmd/Ctrl + Enter to run code.")
+    print("3. Click 'Join' above to connect to any live host.")
+
+if __name__ == "__main__":
+    main()
+`
+      },
+      {
+        path: "app.js",
+        name: "app.js",
+        is_dir: false,
+        size: 320,
+        content: `// FriKode In-Browser JavaScript Sandbox
+function calculateStats(a, b) {
+  const sum = a + b;
+  const product = a * b;
+  console.log("Calculated sum:", sum);
+  console.log("Calculated product:", product);
+  return { sum, product };
+}
+
+calculateStats(42, 108);
+`
+      },
+      {
+        path: "style.css",
+        name: "style.css",
+        is_dir: false,
+        size: 210,
+        content: `/* FriKode MailerBot Industrial Palette */
+:root {
+  --canvas-bg: #fffefc;
+  --canvas-border: #dad1c5;
+  --accent-lime: #e9ffa3;
+  --text-black: #050505;
+}
+`
+      },
+      {
+        path: "README.md",
+        name: "README.md",
+        is_dir: false,
+        size: 490,
+        content: `# FriKode Web Preview
+
+You are currently viewing FriKode hosted live on GitHub Pages!
+
+### Available in this Web Preview:
+- **Interactive Code Editor**: Syntax highlighting, line numbers, and live editing.
+- **In-Browser Execution**: Run JavaScript code directly in the sandbox console.
+- **Remote Host Connection**: Click **Join** in the navigation bar to connect to any live FriKode host over Wi-Fi or Remote Tunnel.
+`
+      }
+    ];
+
+    this._renderFileTree();
+    this.editorManager.openFile("main.py", this.treeData[0].content);
   }
 
   _renderFileTree() {
@@ -772,7 +871,8 @@ class FriKodeApp {
           `;
 
           rowEl.onclick = () => {
-            this.editorManager.openFile(node.path);
+            const initial = node.content !== undefined ? node.content : null;
+            this.editorManager.openFile(node.path, initial);
             this._renderFileTree();
             this.toggleMobileSidebar(false);
           };
@@ -808,6 +908,12 @@ class FriKodeApp {
   _connectSignaling() {
     if (this.signalingWs) {
       this.signalingWs.close();
+    }
+
+    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+    if (isStandaloneStatic) {
+      document.getElementById("reconnectingBanner").style.display = "none";
+      return;
     }
 
     let baseHost = window.location.host;
@@ -1591,12 +1697,61 @@ class FriKodeApp {
         }
       }
     } catch (err) {
-      pre.innerHTML += `<span class="output-stderr">Failed to reach execution runner: ${this._escapeHtml(err.message || String(err))}\n</span>`;
-      if (statusBadge) {
-        statusBadge.className = "compiler-badge status error";
-        statusBadge.textContent = "Error";
+      const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+      const isJs = activePath?.endsWith(".js") || activePath?.endsWith(".html");
+      if (isJs) {
+        pre.innerHTML += `<span class="output-dim">[Browser JS Engine] Running JavaScript in sandbox...\n</span>`;
+        let jsLogs = [];
+        const origLog = console.log;
+        const origErr = console.error;
+        const startTime = performance.now();
+        try {
+          console.log = (...args) => {
+            jsLogs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
+          };
+          console.error = (...args) => {
+            jsLogs.push("[Error] " + args.join(" "));
+          };
+          const fn = new Function(currentCode);
+          fn();
+          const elapsed = Math.round(performance.now() - startTime);
+          const out = jsLogs.join("\n");
+          if (out) pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(out)}\n</span>`;
+          pre.innerHTML += `<span class="output-success">✓ Executed in browser sandbox in ${elapsed}ms\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status success";
+            statusBadge.textContent = `Browser JS (${elapsed}ms)`;
+          }
+          if (beacon) beacon.className = "compiler-beacon success";
+          if (statusDot) statusDot.className = "status-mini-dot active";
+        } catch (evalErr) {
+          pre.innerHTML += `<span class="output-stderr">Runtime Error: ${this._escapeHtml(evalErr.message)}\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status error";
+            statusBadge.textContent = "Error";
+          }
+          if (beacon) beacon.className = "compiler-beacon error";
+        } finally {
+          console.log = origLog;
+          console.error = origErr;
+        }
+      } else if (isStandaloneStatic) {
+        pre.innerHTML += `<span class="output-dim">[FriKode Web Preview Sandbox]\n</span>`;
+        pre.innerHTML += `<span class="output-stdout">✓ Code ready in web preview mode.\nTo compile and execute natively with gcc/clang/python, connect to an active FriKode host or run: python3 run.py\n</span>`;
+        if (statusBadge) {
+          statusBadge.className = "compiler-badge status success";
+          statusBadge.textContent = "Web Preview";
+        }
+        if (beacon) beacon.className = "compiler-beacon success";
+        if (statusDot) statusDot.className = "status-mini-dot active";
+      } else {
+        pre.innerHTML += `<span class="output-stderr">Failed to reach execution runner: ${this._escapeHtml(err.message || String(err))}\n</span>`;
+        if (statusBadge) {
+          statusBadge.className = "compiler-badge status error";
+          statusBadge.textContent = "Error";
+        }
+        if (beacon) beacon.className = "compiler-beacon error";
       }
-      if (beacon) beacon.className = "compiler-beacon error";
     } finally {
       if (btnRun) btnRun.classList.remove("running");
       if (runText) runText.textContent = "Run";
@@ -1688,17 +1843,20 @@ class FriKodeApp {
   // Helpers
   // -------------------------------------------------------------
   _updateNetworkUI() {
+    const isGitHubPages = window.location.hostname.endsWith("github.io");
     const isRemote = window.location.hostname !== "localhost" && 
                      window.location.hostname !== "127.0.0.1" && 
                      window.location.hostname !== "";
     const port = this.session?.port || window.location.port || 4000;
     const ip = this.session?.primary_ip || (isRemote ? window.location.hostname : "127.0.0.1");
     const fullWifiUrl = `http://${ip}:${port}`;
-    const publicUrl = this.session?.public_url || (isRemote ? window.location.origin : null);
+    const publicUrl = this.session?.public_url || (isRemote && !isGitHubPages ? window.location.origin : null);
 
     const homeBadge = document.getElementById("homeLocalIpBadge");
     if (homeBadge) {
-      if (publicUrl) {
+      if (isGitHubPages) {
+        homeBadge.textContent = "GitHub Pages • Connect to Live Host or Explore Demo";
+      } else if (publicUrl) {
         homeBadge.textContent = `Remote Link: ${publicUrl}`;
       } else if (this.session && this.session.primary_ip) {
         homeBadge.textContent = `Wi-Fi Address: ${fullWifiUrl}`;
@@ -1730,8 +1888,34 @@ class FriKodeApp {
       modalCode.textContent = this.session?.session_code || "FRI-READY";
     }
 
-    // If viewing via remote link or hosted domain, make Join the primary action
-    if (isRemote) {
+    // If viewing on GitHub Pages or remote link, make Join and Demo friendly
+    if (isGitHubPages) {
+      const btnJoin = document.getElementById("btnOpenJoinModal");
+      if (btnJoin) {
+        btnJoin.innerHTML = `<span>Connect to Live Host</span>`;
+        btnJoin.className = "mbot-btn mbot-btn-lime";
+      }
+      const btnHost = document.getElementById("btnOpenHostModal");
+      if (btnHost) {
+        btnHost.innerHTML = `<span>Explore Demo Workspace</span>`;
+        btnHost.className = "mbot-btn mbot-btn-tan";
+        btnHost.onclick = (e) => {
+          e.stopPropagation();
+          this.enterWorkspace();
+        };
+      }
+      const btnNavJoin = document.getElementById("btnNavJoin");
+      if (btnNavJoin) {
+        btnNavJoin.textContent = "Connect Host";
+        btnNavJoin.className = "mbot-btn mbot-btn-lime";
+      }
+      const btnNavHost = document.getElementById("btnNavHost");
+      if (btnNavHost) {
+        btnNavHost.innerHTML = `<span>Demo Workspace</span>`;
+        btnNavHost.className = "mbot-btn mbot-btn-tan";
+        btnNavHost.onclick = () => this.enterWorkspace();
+      }
+    } else if (isRemote) {
       const btnJoin = document.getElementById("btnOpenJoinModal");
       if (btnJoin) {
         const code = this.session?.session_code ? ` (${this.session.session_code})` : "";
@@ -1787,6 +1971,12 @@ class FriKodeApp {
 
   _startPingMonitor() {
     if (this.pingInterval) clearInterval(this.pingInterval);
+    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+    if (isStandaloneStatic) {
+      const pingText = document.getElementById("statusPingText");
+      if (pingText) pingText.textContent = `Live Web Demo`;
+      return;
+    }
     this.pingInterval = setInterval(async () => {
       try {
         const ping = await api.ping();

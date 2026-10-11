@@ -9,6 +9,9 @@
 
 **FriKode** is a modern, independent pair programming and collaborative development environment engineered for hackathons, classrooms, remote teams, and study groups.
 
+🌐 **Live Web Client on GitHub Pages:** [https://krishdeokk.github.io/FriKode/](https://krishdeokk.github.io/FriKode/)  
+*Try the interactive demo workspace directly in your browser, or use it to join any active FriKode host remotely.*
+
 FriKode supports two seamless ways to collaborate:
 1. **Local Wi-Fi Mode**: Zero internet required. One laptop hosts directly from their local filesystem over the local Wi-Fi router with instantaneous `<2 ms` LAN latency.
 2. **Worldwide Remote Mode**: Collaborate across different Wi-Fi networks, mobile cellular hotspots, or across continents. Built-in 1-click tunneling generates a secure public HTTPS link with zero password prompts, zero port forwarding, and zero account logins.

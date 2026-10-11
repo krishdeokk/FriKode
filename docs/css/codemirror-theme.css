@@ -1,0 +1,199 @@
+/* ===================================================================
+   FriKode CodeMirror Custom Theme
+   MailerBot Consistent Porcelain Canvas (#fffefc) with Acid-Lime Highlights
+   =================================================================== */
+
+.cm-s-frikode.CodeMirror {
+  background-color: #fffefc;
+  color: #0f172a;
+  font-family: "Roboto Mono", "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+  letter-spacing: -0.01em;
+  height: 100%;
+}
+
+.cm-s-frikode .CodeMirror-gutters {
+  background-color: #fbf9f5;
+  border-right: 1.5px solid #dad1c5;
+  color: #8c8275;
+  padding-right: 10px;
+}
+
+.cm-s-frikode .CodeMirror-linenumber {
+  color: #8c8275;
+  font-size: 12px;
+  font-family: "Roboto Mono", monospace;
+  font-weight: 500;
+}
+
+/* MailerBot Cursor: Solid Black with clean thickness */
+.cm-s-frikode .CodeMirror-cursor {
+  border-left: 2px solid #050505;
+}
+
+/* MailerBot Acid-Lime Text Selection */
+.cm-s-frikode .CodeMirror-selected {
+  background-color: rgba(233, 255, 163, 0.7) !important;
+}
+
+.cm-s-frikode.CodeMirror-focused .CodeMirror-selected {
+  background-color: rgba(233, 255, 163, 0.8) !important;
+}
+
+.cm-s-frikode .CodeMirror-line::selection,
+.cm-s-frikode .CodeMirror-line > span::selection,
+.cm-s-frikode .CodeMirror-line > span > span::selection {
+  background-color: rgba(233, 255, 163, 0.8) !important;
+}
+
+/* Active Line Highlight: Soft Acid-Lime Tint */
+.cm-s-frikode .CodeMirror-activeline-background {
+  background-color: rgba(233, 255, 163, 0.28);
+}
+
+.cm-s-frikode .CodeMirror-matchingbracket {
+  outline: 1.5px solid #050505;
+  background-color: #e9ffa3;
+  color: #050505 !important;
+  font-weight: 800;
+  border-radius: 2px;
+}
+
+/* High-Contrast Syntax Highlighting */
+.cm-s-frikode span.cm-keyword {
+  color: #e11d48;
+  font-weight: 750;
+}
+
+.cm-s-frikode span.cm-def {
+  color: #0284c7;
+  font-weight: 750;
+}
+
+.cm-s-frikode span.cm-variable {
+  color: #0f172a;
+}
+
+.cm-s-frikode span.cm-variable-2 {
+  color: #0369a1;
+  font-weight: 600;
+}
+
+.cm-s-frikode span.cm-variable-3,
+.cm-s-frikode span.cm-type {
+  color: #d97706;
+  font-weight: 700;
+}
+
+.cm-s-frikode span.cm-property {
+  color: #0284c7;
+  font-weight: 600;
+}
+
+.cm-s-frikode span.cm-operator {
+  color: #0369a1;
+  font-weight: 700;
+}
+
+.cm-s-frikode span.cm-comment {
+  color: #8c8275;
+  font-style: italic;
+}
+
+.cm-s-frikode span.cm-string {
+  color: #15803d;
+  font-weight: 500;
+}
+
+.cm-s-frikode span.cm-string-2 {
+  color: #166534;
+}
+
+.cm-s-frikode span.cm-number {
+  color: #d97706;
+  font-weight: 700;
+}
+
+.cm-s-frikode span.cm-atom {
+  color: #e11d48;
+  font-weight: 700;
+}
+
+.cm-s-frikode span.cm-builtin {
+  color: #d97706;
+  font-weight: 700;
+}
+
+.cm-s-frikode span.cm-tag {
+  color: #e11d48;
+  font-weight: 750;
+}
+
+.cm-s-frikode span.cm-attribute {
+  color: #0284c7;
+}
+
+.cm-s-frikode span.cm-header {
+  color: #7c3aed;
+  font-weight: 800;
+}
+
+.cm-s-frikode span.cm-link {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.cm-s-frikode span.cm-error {
+  color: #ef4444;
+  border-bottom: 1.5px dashed #ef4444;
+}
+
+/* Scrollbars */
+.cm-s-frikode .CodeMirror-scrollbar-filler,
+.cm-s-frikode .CodeMirror-gutter-filler {
+  background-color: #fbf9f5;
+}
+
+/* Remote Collaborative Cursors & Caret Tags */
+.remote-caret {
+  position: absolute;
+  border-left: 2px solid;
+  margin-left: -1px;
+  margin-right: -1px;
+  box-sizing: border-box;
+  z-index: 10;
+  height: 1.35em;
+  pointer-events: none;
+}
+
+.remote-caret > div {
+  position: absolute;
+  top: -1.5em;
+  left: -2px;
+  font-size: 11px;
+  font-family: "Roboto Mono", monospace;
+  font-weight: 750;
+  color: #050505;
+  padding: 1px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: opacity 0.25s ease-out;
+  opacity: 1;
+}
+
+.remote-caret.hide-name > div {
+  opacity: 0;
+}
+
+.remote-caret:hover > div {
+  opacity: 1 !important;
+}
+
+.y-line-selection {
+  border-radius: 2px;
+  opacity: 0.35;
+}

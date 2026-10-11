@@ -148,6 +148,9 @@ export class EditorManager {
     // Initialize Yjs CRDT room for this file
     const ydoc = new Y.Doc();
     const ytext = ydoc.getText("content");
+    if (content && ytext.toString() === "") {
+      ytext.insert(0, content);
+    }
 
     // Establish WebSocket provider to server room
     let host = window.location.host;
@@ -161,7 +164,8 @@ export class EditorManager {
     }
     const wsUrl = `${protocol}//${host}/ws/yjs`;
 
-    const provider = new WebsocketProvider(wsUrl, path, ydoc, { connect: true });
+    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+    const provider = new WebsocketProvider(wsUrl, path, ydoc, { connect: !isStandaloneStatic });
 
     // Set user awareness (presence name and cursor color)
     provider.awareness.setLocalStateField("user", {
