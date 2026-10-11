@@ -10,7 +10,7 @@ import { api } from "./api.js";
 import { Icons, getFileIcon } from "./icons.js";
 
 export class EditorManager {
-  constructor({ onCursorChange, onSaveStateChange, onTabChange }) {
+  constructor({ onCursorChange, onSaveStateChange, onTabChange, onAwarenessChange, onFileSave } = {}) {
     this.container = document.getElementById("editorContainer");
     this.tabsBar = document.getElementById("tabsBar");
     this.breadcrumb = document.getElementById("breadcrumbPath");
@@ -19,6 +19,10 @@ export class EditorManager {
     this.onCursorChange = onCursorChange || (() => {});
     this.onSaveStateChange = onSaveStateChange || (() => {});
     this.onTabChange = onTabChange || (() => {});
+    this.onAwarenessChange = onAwarenessChange || (() => {});
+    this.onFileSave = onFileSave || (() => {});
+
+    this.sessionCode = null;
 
     this.user = {
       name: "Anonymous",
@@ -31,6 +35,10 @@ export class EditorManager {
     this.autoSaveTimer = null;
 
     this._initCodeMirror();
+  }
+
+  setSessionCode(code) {
+    this.sessionCode = code;
   }
 
   setUser(name, color) {
@@ -162,15 +170,32 @@ export class EditorManager {
         protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
       } catch (_) {}
     }
-    const wsUrl = `${protocol}//${host}/ws/yjs`;
 
     const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
-    const provider = new WebsocketProvider(wsUrl, path, ydoc, { connect: !isStandaloneStatic });
+    let wsUrl, roomName;
+    if (isStandaloneStatic) {
+      // Connect to public demo relay for peer-to-peer real-time sync with teammates
+      wsUrl = "wss://demos.yjs.dev/ws";
+      const code = this.sessionCode || "public-room";
+      roomName = `frikode-${code}-${path}`;
+    } else {
+      wsUrl = `${protocol}//${host}/ws/yjs`;
+      roomName = path;
+    }
+
+    const provider = new WebsocketProvider(wsUrl, roomName, ydoc, { connect: true });
 
     // Set user awareness (presence name and cursor color)
     provider.awareness.setLocalStateField("user", {
       name: this.user.name,
       color: this.user.color
+    });
+
+    provider.awareness.on("change", () => {
+      if (this.onAwarenessChange) {
+        const states = Array.from(provider.awareness.getStates().values());
+        this.onAwarenessChange(states);
+      }
     });
 
     const tabData = {
@@ -270,6 +295,13 @@ export class EditorManager {
     this._renderTabs();
   }
 
+  closeAllTabs() {
+    const paths = Array.from(this.openTabs.keys());
+    for (const p of paths) {
+      this.closeTab(p);
+    }
+  }
+
   async saveCurrentFile() {
     if (!this.activePath) return;
 
@@ -280,13 +312,29 @@ export class EditorManager {
 
     try {
       const text = this.cm.getValue();
-      await api.saveFile(this.activePath, text, this.user.name);
+      const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+      if (!isStandaloneStatic) {
+        await api.saveFile(this.activePath, text, this.user.name);
+      }
       tab.dirty = false;
       this._updateTabUI(this.activePath);
       this.onSaveStateChange("synced");
+      if (this.onFileSave) {
+        this.onFileSave(this.activePath, text);
+      }
     } catch (err) {
-      console.error("Failed to save file:", err);
-      this.onSaveStateChange("error");
+      const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+      if (isStandaloneStatic) {
+        tab.dirty = false;
+        this._updateTabUI(this.activePath);
+        this.onSaveStateChange("synced");
+        if (this.onFileSave) {
+          this.onFileSave(this.activePath, this.cm.getValue());
+        }
+      } else {
+        console.error("Failed to save file:", err);
+        this.onSaveStateChange("error");
+      }
     }
   }
 

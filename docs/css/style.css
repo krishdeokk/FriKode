@@ -2749,3 +2749,154 @@ kbd {
     padding: 10px 16px;
   }
 }
+
+/* ===================================================================
+   Workspace Management & Template Selector (Industrial Finish)
+   =================================================================== */
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.template-card {
+  background: var(--canvas-bg);
+  border: 1.5px solid var(--canvas-border);
+  border-radius: 8px;
+  padding: 12px 8px;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 5px;
+  user-select: none;
+}
+
+.template-card:hover {
+  border-color: var(--accent-tan);
+  background: #fbf9f4;
+  transform: translateY(-1px);
+}
+
+.template-card.selected {
+  border-color: #050505;
+  background: rgba(233, 255, 163, 0.25);
+  box-shadow: 0 0 0 1px #050505;
+}
+
+.template-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.template-name {
+  font-weight: 750;
+  font-size: 11.5px;
+  color: var(--text-black);
+}
+
+.template-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+
+/* Topbar Switch Workspace Button */
+.topbar-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 3px 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+
+.topbar-switch-btn:hover {
+  background: var(--canvas-border);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.topbar-chevron {
+  font-size: 9px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+
+/* Saved Workspaces List */
+.workspace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.workspace-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: 1.5px solid var(--canvas-border);
+  border-radius: 8px;
+  background: var(--canvas-bg);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 12px;
+}
+
+.workspace-item:hover {
+  border-color: var(--accent-tan);
+  background: #fbf9f4;
+}
+
+.workspace-item.active {
+  border-color: #050505;
+  background: rgba(233, 255, 163, 0.15);
+}
+
+.workspace-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.workspace-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workspace-item-name {
+  font-weight: 750;
+  font-size: 13px;
+  color: var(--text-black);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.workspace-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+

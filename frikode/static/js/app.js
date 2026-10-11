@@ -8,8 +8,218 @@ import { EditorManager } from "./editor.js";
 import { Icons, getFileIcon } from "./icons.js";
 import { ACCENT_COLORS, getRandomColor, copyToClipboard, showToast, formatTime, safeGetStorage, safeSetStorage } from "./utils.js";
 
+/**
+ * In-Browser Workspace Store
+ * Enables every user on the website to create, save, switch, and export workspaces.
+ */
+class WorkspaceStore {
+  constructor() {
+    this.STORAGE_KEY = "frikode_workspaces_v2";
+    this.ACTIVE_ID_KEY = "frikode_active_ws_id";
+  }
+
+  getAll() {
+    try {
+      const raw = localStorage.getItem(this.STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  saveAll(workspaces) {
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(workspaces));
+    } catch (e) {
+      console.warn("[WorkspaceStore] Save failed:", e);
+    }
+  }
+
+  getActiveId() {
+    return localStorage.getItem(this.ACTIVE_ID_KEY);
+  }
+
+  setActiveId(id) {
+    if (id) {
+      localStorage.setItem(this.ACTIVE_ID_KEY, id);
+    } else {
+      localStorage.removeItem(this.ACTIVE_ID_KEY);
+    }
+  }
+
+  getActiveWorkspace() {
+    const all = this.getAll();
+    const id = this.getActiveId();
+    if (id && all[id]) return all[id];
+    const keys = Object.keys(all);
+    if (keys.length > 0) {
+      this.setActiveId(keys[0]);
+      return all[keys[0]];
+    }
+    return null;
+  }
+
+  saveWorkspace(ws) {
+    if (!ws || !ws.id) return;
+    const all = this.getAll();
+    ws.last_active = Date.now();
+    all[ws.id] = ws;
+    this.saveAll(all);
+  }
+
+  createWorkspace(name, template = "python") {
+    const all = this.getAll();
+    const id = "ws_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6);
+    const sessionCode = "FRI-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+    name = (name || "").trim() || "My Workspace";
+
+    let files = {};
+    if (template === "python") {
+      files["main.py"] = {
+        path: "main.py",
+        name: "main.py",
+        is_dir: false,
+        size: 320,
+        content: `# FriKode • Python Workspace\n# Real-time pair programming & compiler console\n\ndef greet(name):\n    return f"Welcome to {name}!"\n\ndef main():\n    msg = greet("${name}")\n    print(msg)\n    print("1. Edit any code in the editor.")\n    print("2. Press Cmd/Ctrl + Enter to run.")\n    print("3. Click 'Share / Invite' above to pair program.")\n\nif __name__ == "__main__":\n    main()\n`
+      };
+      files["README.md"] = {
+        path: "README.md",
+        name: "README.md",
+        is_dir: false,
+        size: 240,
+        content: `# ${name}\n\nCollaborative Python workspace created in FriKode.\n\n- Real-time CRDT peer collaboration.\n- In-browser compiler & execution sandbox.\n`
+      };
+    } else if (template === "web") {
+      files["index.html"] = {
+        path: "index.html",
+        name: "index.html",
+        is_dir: false,
+        size: 420,
+        content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>${name}</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <main class="hero">\n    <h1>${name}</h1>\n    <p>Live collaborative web application built in FriKode.</p>\n    <button id="btnCounter">Clicks: 0</button>\n  </main>\n  <script src="app.js"></script>\n</body>\n</html>\n`
+      };
+      files["style.css"] = {
+        path: "style.css",
+        name: "style.css",
+        is_dir: false,
+        size: 340,
+        content: `body {\n  font-family: system-ui, -apple-system, sans-serif;\n  background: #fdfbf7;\n  color: #111827;\n  display: grid;\n  place-items: center;\n  min-height: 100vh;\n  margin: 0;\n}\n.hero {\n  text-align: center;\n  background: #ffffff;\n  padding: 32px 40px;\n  border-radius: 12px;\n  border: 1px solid #e5e7eb;\n  box-shadow: 0 4px 12px rgba(0,0,0,0.05);\n}\nbutton {\n  background: #050505;\n  color: #fff;\n  border: none;\n  padding: 10px 22px;\n  border-radius: 8px;\n  font-weight: 600;\n  cursor: pointer;\n}\n`
+      };
+      files["app.js"] = {
+        path: "app.js",
+        name: "app.js",
+        is_dir: false,
+        size: 360,
+        content: `// Web Application Logic\nconsole.log("App loaded for ${name}");\n\nlet count = 0;\nconst btn = document.getElementById("btnCounter");\nif (btn) {\n  btn.addEventListener("click", () => {\n    count++;\n    btn.textContent = "Clicks: " + count;\n    console.log("Counter updated to:", count);\n  });\n}\n`
+      };
+      files["README.md"] = {
+        path: "README.md",
+        name: "README.md",
+        is_dir: false,
+        size: 210,
+        content: `# ${name}\n\nWeb App project (HTML + CSS + JS).\nPress Run to execute your JavaScript in the browser console.\n`
+      };
+    } else if (template === "c") {
+      files["main.c"] = {
+        path: "main.c",
+        name: "main.c",
+        is_dir: false,
+        size: 260,
+        content: `#include <stdio.h>\n\nint main() {\n    printf("FriKode C Workspace: %s\\n", "${name}");\n    printf("Real-time collaborative code editor\\n");\n    return 0;\n}\n`
+      };
+      files["README.md"] = {
+        path: "README.md",
+        name: "README.md",
+        is_dir: false,
+        size: 200,
+        content: `# ${name}\n\nC/C++ Project created with FriKode.\n`
+      };
+    } else {
+      // Blank
+      files["main.py"] = {
+        path: "main.py",
+        name: "main.py",
+        is_dir: false,
+        size: 120,
+        content: `# ${name}\n# Start writing your code here...\n`
+      };
+    }
+
+    const ws = {
+      id,
+      name,
+      template,
+      session_code: sessionCode,
+      files,
+      created_at: Date.now(),
+      last_active: Date.now()
+    };
+
+    all[id] = ws;
+    this.saveAll(all);
+    this.setActiveId(id);
+    return ws;
+  }
+
+  deleteWorkspace(id) {
+    const all = this.getAll();
+    delete all[id];
+    this.saveAll(all);
+    if (this.getActiveId() === id) {
+      const keys = Object.keys(all);
+      this.setActiveId(keys[0] || null);
+    }
+  }
+
+  toTree(filesObj) {
+    const tree = [];
+    const dirs = new Map();
+
+    Object.values(filesObj || {}).forEach(item => {
+      const parts = item.path.split("/");
+      if (parts.length === 1) {
+        tree.push({
+          path: item.path,
+          name: item.name || item.path,
+          is_dir: !!item.is_dir,
+          size: item.size || (item.content ? item.content.length : 0),
+          content: item.content
+        });
+      } else {
+        let currentPath = "";
+        let currentChildren = tree;
+        for (let i = 0; i < parts.length - 1; i++) {
+          const dirName = parts[i];
+          currentPath = currentPath ? `${currentPath}/${dirName}` : dirName;
+          let dirNode = dirs.get(currentPath);
+          if (!dirNode) {
+            dirNode = {
+              path: currentPath,
+              name: dirName,
+              is_dir: true,
+              children: []
+            };
+            dirs.set(currentPath, dirNode);
+            currentChildren.push(dirNode);
+          }
+          currentChildren = dirNode.children;
+        }
+        currentChildren.push({
+          path: item.path,
+          name: parts[parts.length - 1],
+          is_dir: !!item.is_dir,
+          size: item.size || (item.content ? item.content.length : 0),
+          content: item.content
+        });
+      }
+    });
+
+    return tree;
+  }
+}
+
 class FriKodeApp {
   constructor() {
+    this.workspaceStore = new WorkspaceStore();
     this.session = null;
     this.role = "host"; // "host" or "participant"
     this.user = {
@@ -143,6 +353,8 @@ class FriKodeApp {
     setIcon("compilerClearIcon", Icons.clear);
     setIcon("compilerMaxIcon", Icons.maximize);
     setIcon("statusConsoleIcon", Icons.terminal);
+    setIcon("downloadWorkspaceIcon", Icons.download);
+    setIcon("modalSwitchIcon", Icons.layers);
   }
 
   _initColorSwatches(containerId = "colorSwatches", onColorSelect = null) {
@@ -199,6 +411,30 @@ class FriKodeApp {
             if (compilerLangEl) compilerLangEl.textContent = "PYTHON";
             this._notifyFileFocus(null);
           }
+        }
+      },
+      onAwarenessChange: (states) => {
+        const isStandaloneStatic = window.location.hostname.endsWith("github.io") || !api.baseUrl;
+        if (isStandaloneStatic) {
+          this._handleAwarenessPeers(states);
+        }
+      },
+      onFileSave: (path, content) => {
+        const activeWs = this.workspaceStore.getActiveWorkspace();
+        if (activeWs && activeWs.files) {
+          if (!activeWs.files[path]) {
+            activeWs.files[path] = {
+              path,
+              name: path.split("/").pop(),
+              is_dir: false,
+              size: content.length,
+              content
+            };
+          } else {
+            activeWs.files[path].content = content;
+            activeWs.files[path].size = content.length;
+          }
+          this.workspaceStore.saveWorkspace(activeWs);
         }
       }
     });
@@ -349,6 +585,42 @@ class FriKodeApp {
     document.getElementById("btnNewFile").onclick = () => this.openCreateEntryModal("file");
     document.getElementById("btnNewFolder").onclick = () => this.openCreateEntryModal("folder");
     document.getElementById("btnRefreshFiles").onclick = () => this.loadFiles();
+    const btnDownload = document.getElementById("btnDownloadWorkspace");
+    if (btnDownload) {
+      btnDownload.onclick = () => this.downloadCurrentWorkspace();
+    }
+
+    // Workspace Switching & Management
+    const btnSwitch = document.getElementById("btnSwitchWorkspace");
+    if (btnSwitch) {
+      btnSwitch.onclick = () => this.openSwitchWorkspaceModal();
+    }
+    const btnCloseSwitch = document.getElementById("btnCloseSwitchWorkspaceModal");
+    if (btnCloseSwitch) btnCloseSwitch.onclick = () => this.closeModal("switchWorkspaceModal");
+    const btnCloseSwitchFooter = document.getElementById("btnCloseSwitchModalFooter");
+    if (btnCloseSwitchFooter) btnCloseSwitchFooter.onclick = () => this.closeModal("switchWorkspaceModal");
+    const btnCreateFromModal = document.getElementById("btnCreateNewWorkspaceFromModal");
+    if (btnCreateFromModal) {
+      btnCreateFromModal.onclick = () => {
+        this.closeModal("switchWorkspaceModal");
+        this.openHostModal();
+      };
+    }
+
+    // Host Template Cards Selection
+    document.querySelectorAll("#hostTemplateGrid .template-card").forEach(card => {
+      card.onclick = async () => {
+        document.querySelectorAll("#hostTemplateGrid .template-card").forEach(c => c.classList.remove("selected"));
+        card.classList.add("selected");
+        if (card.dataset.template === "folder") {
+          try {
+            await this.openLocalDirectoryFolder();
+          } catch (err) {
+            console.warn("Folder picker cancelled:", err);
+          }
+        }
+      };
+    });
 
     // Create Entry Modal
     document.getElementById("btnCloseCreateEntryModal").onclick = () => this.closeModal("createEntryModal");
@@ -424,6 +696,11 @@ class FriKodeApp {
     if (nameInput) {
       nameInput.value = safeGetStorage("frikode_name", this.user.name || "Developer");
     }
+    const wsInput = document.getElementById("hostWorkspaceInput");
+    if (wsInput) {
+      const activeWs = this.workspaceStore.getActiveWorkspace();
+      wsInput.value = activeWs ? activeWs.name : "My Project";
+    }
     this._initColorSwatches("hostColorSwatches");
     this._updateNetworkUI(); // Immediate render using current origin/port
     this.openModal("hostModal"); // Open modal instantly on click
@@ -444,32 +721,49 @@ class FriKodeApp {
     const origHtml = btn ? btn.innerHTML : "";
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = `<span>Starting...</span>`;
+      btn.innerHTML = `<span>Creating...</span>`;
     }
 
     try {
-      const workspaceInput = document.getElementById("hostWorkspaceInput")?.value?.trim() || "sample_project";
+      const workspaceInput = document.getElementById("hostWorkspaceInput")?.value?.trim() || "My Project";
       const hostName = document.getElementById("hostNameInput")?.value?.trim() || safeGetStorage("frikode_name", "Developer");
-      const enableTunnel = document.getElementById("hostEnableTunnelCheckbox")?.checked || false;
+      const enableTunnel = document.getElementById("hostEnableTunnelCheckbox")?.checked ?? true;
+      const selectedCard = document.querySelector("#hostTemplateGrid .template-card.selected");
+      const template = selectedCard?.dataset?.template || "python";
+
       this.user.name = hostName;
       safeSetStorage("frikode_name", hostName);
 
-      try {
-        const res = await api.createSession(workspaceInput, false);
-        if (!this.session) this.session = {};
-        this.session.session_code = res.session_code;
-        this.session.workspace_name = res.workspace_name;
-      } catch (err) {
-        console.error("Failed to reinitialize workspace:", err);
+      const isStandaloneStatic = window.location.hostname.endsWith("github.io") || !api.baseUrl;
+
+      // 1. If backend exists, create session on backend
+      if (!isStandaloneStatic) {
+        try {
+          const res = await api.createSession(workspaceInput, false);
+          if (!this.session) this.session = {};
+          this.session.session_code = res.session_code;
+          this.session.workspace_name = res.workspace_name;
+        } catch (err) {
+          console.warn("Backend session creation skipped/fallback:", err);
+        }
       }
+
+      // 2. Always persist workspace into local WorkspaceStore
+      const ws = this.workspaceStore.createWorkspace(workspaceInput, template);
+      if (!this.session) this.session = {};
+      this.session.session_code = this.session.session_code || ws.session_code;
+      this.session.workspace_name = ws.name;
+      this.session.template = template;
 
       this.role = "host";
       this.editorManager?.setUser(this.user.name, this.user.color);
+      this.editorManager?.setSessionCode(this.session.session_code);
 
       this.closeModal("hostModal");
       await this.enterWorkspace();
+      showToast(`Workspace "${ws.name}" created!`, "success");
 
-      if (enableTunnel && !this.tunnelActive) {
+      if (enableTunnel && !this.tunnelActive && !isStandaloneStatic) {
         showToast("Starting remote access link...", "info");
         api.startTunnel("auto").then(t => {
           this._updateTunnelUI(t);
@@ -481,14 +775,205 @@ class FriKodeApp {
         });
       }
     } catch (err) {
-      console.error("Error starting host session:", err);
-      showToast("Error starting session: " + (err.message || err), "error");
+      console.error("Error creating workspace:", err);
+      showToast("Error creating workspace: " + (err.message || err), "error");
     } finally {
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = origHtml;
       }
     }
+  }
+
+  // -------------------------------------------------------------
+  // Workspace Switching & Management
+  // -------------------------------------------------------------
+  openSwitchWorkspaceModal() {
+    const list = document.getElementById("savedWorkspacesList");
+    if (!list) return;
+    const all = this.workspaceStore.getAll();
+    const activeId = this.workspaceStore.getActiveId();
+    const entries = Object.values(all);
+
+    if (entries.length === 0) {
+      list.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px;">No saved workspaces yet. Click "+ New Workspace" below.</div>`;
+    } else {
+      list.innerHTML = entries.map(ws => {
+        const isActive = ws.id === activeId;
+        const fileCount = Object.keys(ws.files || {}).length;
+        const templateBadge = (ws.template || "custom").toUpperCase();
+        return `
+          <div class="workspace-item ${isActive ? "active" : ""}">
+            <div class="workspace-item-info">
+              <div class="workspace-item-title-row">
+                <span class="workspace-item-name">${this._escapeHtml(ws.name)}</span>
+                <span class="badge-role ${isActive ? "host" : "peer"}" style="font-size: 9px; padding: 1px 5px;">${templateBadge}</span>
+                ${isActive ? `<span style="font-size: 10px; color: #10b981; font-weight: 700;">● Active</span>` : ""}
+              </div>
+              <span class="workspace-item-meta">${fileCount} files • Code: ${ws.session_code || "FRI-READY"}</span>
+            </div>
+            <div class="workspace-item-actions">
+              ${!isActive ? `<button class="peer-mini-btn lime" data-switch-id="${ws.id}">Open</button>` : ""}
+              <button class="peer-mini-btn" data-delete-ws="${ws.id}" title="Delete workspace">✕</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      list.querySelectorAll("[data-switch-id]").forEach(btn => {
+        btn.onclick = () => {
+          this.switchWorkspace(btn.dataset.switchId);
+          this.closeModal("switchWorkspaceModal");
+        };
+      });
+
+      list.querySelectorAll("[data-delete-ws]").forEach(btn => {
+        btn.onclick = () => {
+          const wsId = btn.dataset.deleteWs;
+          if (confirm("Delete this workspace from your browser?")) {
+            this.workspaceStore.deleteWorkspace(wsId);
+            this.openSwitchWorkspaceModal();
+          }
+        };
+      });
+    }
+
+    this.openModal("switchWorkspaceModal");
+  }
+
+  async switchWorkspace(wsId) {
+    this.workspaceStore.setActiveId(wsId);
+    const ws = this.workspaceStore.getActiveWorkspace();
+    if (ws) {
+      if (!this.session) this.session = {};
+      this.session.workspace_name = ws.name;
+      this.session.session_code = ws.session_code;
+      const titleEl = document.getElementById("topbarProjectName");
+      if (titleEl) titleEl.textContent = ws.name;
+      const codeEl = document.getElementById("topbarSessionCode");
+      if (codeEl) codeEl.textContent = ws.session_code || "FRI-....";
+      this.editorManager?.setSessionCode(ws.session_code);
+      this.editorManager?.closeAllTabs();
+      await this.loadFiles();
+      showToast(`Switched to "${ws.name}"`, "info");
+    }
+  }
+
+  downloadCurrentWorkspace() {
+    const activeWs = this.workspaceStore.getActiveWorkspace();
+    if (!activeWs || !activeWs.files || Object.keys(activeWs.files).length === 0) {
+      showToast("No files to download in workspace", "error");
+      return;
+    }
+
+    const files = activeWs.files;
+    const fileEntries = Object.entries(files).filter(([_, f]) => !f.is_dir);
+
+    if (fileEntries.length === 0) {
+      showToast("Workspace is empty", "info");
+      return;
+    }
+
+    if (fileEntries.length === 1) {
+      const [path, f] = fileEntries[0];
+      const blob = new Blob([f.content || ""], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = path.split("/").pop();
+      a.click();
+      showToast(`Downloaded ${a.download}`, "success");
+      return;
+    }
+
+    let count = 0;
+    fileEntries.forEach(([path, f], index) => {
+      setTimeout(() => {
+        const blob = new Blob([f.content || ""], { type: "text/plain;charset=utf-8" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = path.split("/").pop();
+        a.click();
+        count++;
+        if (count === fileEntries.length) {
+          showToast(`Downloaded ${count} workspace files!`, "success");
+        }
+      }, index * 200);
+    });
+  }
+
+  async openLocalDirectoryFolder() {
+    if (!window.showDirectoryPicker) {
+      showToast("Directory Picker is supported in Chrome, Edge, and desktop browsers.", "info");
+      return;
+    }
+    try {
+      const dirHandle = await window.showDirectoryPicker();
+      const wsName = dirHandle.name || "Device Project";
+      const files = {};
+
+      const readDirectory = async (handle, prefix = "") => {
+        for await (const entry of handle.values()) {
+          const fullPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+          if (entry.kind === "file") {
+            if (entry.name.startsWith(".git") || entry.name.endsWith(".pyc")) continue;
+            try {
+              const file = await entry.getFile();
+              if (file.size < 500000) {
+                const content = await file.text();
+                files[fullPath] = {
+                  path: fullPath,
+                  name: entry.name,
+                  is_dir: false,
+                  size: file.size,
+                  content: content
+                };
+              }
+            } catch (_) {}
+          } else if (entry.kind === "directory" && entry.name !== ".git" && entry.name !== "node_modules" && entry.name !== ".venv") {
+            files[fullPath] = {
+              path: fullPath,
+              name: entry.name,
+              is_dir: true,
+              size: 0,
+              content: ""
+            };
+            await readDirectory(entry, fullPath);
+          }
+        }
+      };
+
+      await readDirectory(dirHandle);
+      const ws = this.workspaceStore.createWorkspace(wsName, "folder");
+      ws.files = files;
+      this.workspaceStore.saveWorkspace(ws);
+
+      const nameInput = document.getElementById("hostWorkspaceInput");
+      if (nameInput) nameInput.value = wsName;
+      showToast(`Loaded folder "${wsName}" with ${Object.keys(files).length} files!`, "success");
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.warn("Folder picker error:", err);
+      }
+    }
+  }
+
+  _handleAwarenessPeers(states) {
+    if (!states || states.length === 0) return;
+    const peerMap = new Map();
+    states.forEach((s) => {
+      if (s.user && s.user.name) {
+        const peerId = `p2p_${s.user.name}_${s.user.color}`;
+        peerMap.set(peerId, {
+          id: peerId,
+          name: s.user.name,
+          color: s.user.color || "#22d3ee",
+          role: s.user.name === this.user.name ? this.role : "peer",
+          active_file: this.editorManager?.getActiveFile() || ""
+        });
+      }
+    });
+    this.peers = Array.from(peerMap.values());
+    this._renderPeers();
   }
 
   // -------------------------------------------------------------
@@ -728,19 +1213,33 @@ class FriKodeApp {
   }
 
   async loadFiles() {
-    try {
-      const res = await api.getFiles();
-      this.treeData = res.tree || [];
-      this._renderFileTree();
-    } catch (err) {
-      console.warn("Could not load backend file tree:", err);
-      // Fallback for standalone/GitHub Pages demo mode!
-      if (!this.session || window.location.hostname.endsWith("github.io")) {
-        this._loadDemoWorkspace();
-      } else {
-        showToast("Failed to refresh file tree", "error");
+    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+    if (!isStandaloneStatic) {
+      try {
+        const res = await api.getFiles();
+        if (res && res.tree && res.tree.length > 0) {
+          this.treeData = res.tree;
+          this._renderFileTree();
+          return;
+        }
+      } catch (err) {
+        console.warn("Backend file fetch skipped/fallback:", err);
       }
     }
+
+    // Load from local WorkspaceStore
+    let activeWs = this.workspaceStore.getActiveWorkspace();
+    if (!activeWs) {
+      activeWs = this.workspaceStore.createWorkspace("My Project", "python");
+    }
+    if (this.session) {
+      this.session.workspace_name = activeWs.name;
+      this.session.session_code = this.session.session_code || activeWs.session_code;
+      const titleEl = document.getElementById("topbarProjectName");
+      if (titleEl) titleEl.textContent = activeWs.name;
+    }
+    this.treeData = this.workspaceStore.toTree(activeWs.files);
+    this._renderFileTree();
   }
 
   _loadDemoWorkspace() {
@@ -1315,16 +1814,42 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       return;
     }
 
-    try {
-      await api.createFile(name, this.pendingCreateType === "folder");
+    const isFolder = this.pendingCreateType === "folder";
+    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+
+    if (!isStandaloneStatic) {
+      try {
+        await api.createFile(name, isFolder);
+        this.closeModal("createEntryModal");
+        await this.loadFiles();
+        if (!isFolder) {
+          this.editorManager.openFile(name);
+        }
+        showToast(`Created ${name}`, "success");
+        return;
+      } catch (err) {
+        console.warn("Backend createFile failed/skipped, saving to local workspace:", err);
+      }
+    }
+
+    // In-browser workspace store
+    const activeWs = this.workspaceStore.getActiveWorkspace();
+    if (activeWs) {
+      if (!activeWs.files) activeWs.files = {};
+      activeWs.files[name] = {
+        path: name,
+        name: name.split("/").pop(),
+        is_dir: isFolder,
+        size: 0,
+        content: ""
+      };
+      this.workspaceStore.saveWorkspace(activeWs);
       this.closeModal("createEntryModal");
       await this.loadFiles();
-      if (this.pendingCreateType === "file") {
-        this.editorManager.openFile(name);
+      if (!isFolder) {
+        this.editorManager.openFile(name, "");
       }
       showToast(`Created ${name}`, "success");
-    } catch (err) {
-      showToast(err.message || "Failed to create item", "error");
     }
   }
 
@@ -1337,14 +1862,29 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   async confirmDeleteEntry() {
     if (!this.pendingDeletePath) return;
 
-    try {
-      await api.deleteFile(this.pendingDeletePath);
+    const isStandaloneStatic = window.location.hostname.endsWith("github.io") && !api.baseUrl;
+
+    if (!isStandaloneStatic) {
+      try {
+        await api.deleteFile(this.pendingDeletePath);
+        this.editorManager.closeTab(this.pendingDeletePath);
+        this.closeModal("deleteConfirmModal");
+        await this.loadFiles();
+        showToast(`Deleted ${this.pendingDeletePath}`, "success");
+        return;
+      } catch (err) {
+        console.warn("Backend deleteFile failed/skipped, removing from local workspace:", err);
+      }
+    }
+
+    const activeWs = this.workspaceStore.getActiveWorkspace();
+    if (activeWs && activeWs.files) {
+      delete activeWs.files[this.pendingDeletePath];
+      this.workspaceStore.saveWorkspace(activeWs);
       this.editorManager.closeTab(this.pendingDeletePath);
       this.closeModal("deleteConfirmModal");
       await this.loadFiles();
       showToast(`Deleted ${this.pendingDeletePath}`, "success");
-    } catch (err) {
-      showToast(err.message || "Failed to delete item", "error");
     }
   }
 
@@ -1855,7 +2395,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
     const homeBadge = document.getElementById("homeLocalIpBadge");
     if (homeBadge) {
       if (isGitHubPages) {
-        homeBadge.textContent = "GitHub Pages • Connect to Live Host or Explore Demo";
+        homeBadge.textContent = "GitHub Pages • In-Browser Workspaces & Real-Time Collaboration";
       } else if (publicUrl) {
         homeBadge.textContent = `Remote Link: ${publicUrl}`;
       } else if (this.session && this.session.primary_ip) {
@@ -1888,59 +2428,47 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       modalCode.textContent = this.session?.session_code || "FRI-READY";
     }
 
-    // If viewing on GitHub Pages or remote link, make Join and Demo friendly
-    if (isGitHubPages) {
-      const btnJoin = document.getElementById("btnOpenJoinModal");
-      if (btnJoin) {
-        btnJoin.innerHTML = `<span>Connect to Live Host</span>`;
-        btnJoin.className = "mbot-btn mbot-btn-lime";
-      }
-      const btnHost = document.getElementById("btnOpenHostModal");
-      if (btnHost) {
-        btnHost.innerHTML = `<span>Explore Demo Workspace</span>`;
-        btnHost.className = "mbot-btn mbot-btn-tan";
-        btnHost.onclick = (e) => {
-          e.stopPropagation();
-          this.enterWorkspace();
-        };
-      }
-      const btnNavJoin = document.getElementById("btnNavJoin");
-      if (btnNavJoin) {
-        btnNavJoin.textContent = "Connect Host";
-        btnNavJoin.className = "mbot-btn mbot-btn-lime";
-      }
-      const btnNavHost = document.getElementById("btnNavHost");
-      if (btnNavHost) {
-        btnNavHost.innerHTML = `<span>Demo Workspace</span>`;
-        btnNavHost.className = "mbot-btn mbot-btn-tan";
-        btnNavHost.onclick = () => this.enterWorkspace();
-      }
-    } else if (isRemote) {
-      const btnJoin = document.getElementById("btnOpenJoinModal");
-      if (btnJoin) {
-        const code = this.session?.session_code ? ` (${this.session.session_code})` : "";
-        btnJoin.innerHTML = `<span>Join Active Session${code}</span>`;
-        btnJoin.className = "mbot-btn mbot-btn-lime";
-      }
-      const btnHost = document.getElementById("btnOpenHostModal");
-      if (btnHost) {
-        btnHost.className = "mbot-btn mbot-btn-tan";
-      }
-      const btnNavJoin = document.getElementById("btnNavJoin");
-      if (btnNavJoin) {
-        btnNavJoin.className = "mbot-btn mbot-btn-lime";
-      }
-      const btnNavHost = document.getElementById("btnNavHost");
-      if (btnNavHost) {
-        btnNavHost.className = "mbot-btn mbot-btn-tan";
-      }
+    // Set buttons to Create Workspace & Join Workspace
+    const btnJoin = document.getElementById("btnOpenJoinModal");
+    if (btnJoin) {
+      btnJoin.innerHTML = `<span>Join Workspace</span>`;
+      btnJoin.className = "mbot-btn mbot-btn-tan";
+      btnJoin.onclick = () => this.openJoinModal();
+    }
+    const btnHost = document.getElementById("btnOpenHostModal");
+    if (btnHost) {
+      btnHost.innerHTML = `<span>Create Workspace</span>
+        <span class="mbot-arrow-track" aria-hidden="true">
+          <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg primary"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
+          <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg clone"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
+        </span>`;
+      btnHost.className = "mbot-btn mbot-btn-lime";
+      btnHost.onclick = () => this.openHostModal();
+    }
+    const btnNavJoin = document.getElementById("btnNavJoin");
+    if (btnNavJoin) {
+      btnNavJoin.textContent = "Join Workspace";
+      btnNavJoin.className = "mbot-btn mbot-btn-tan";
+      btnNavJoin.onclick = () => this.openJoinModal();
+    }
+    const btnNavHost = document.getElementById("btnNavHost");
+    if (btnNavHost) {
+      btnNavHost.innerHTML = `<span>Create Workspace</span>`;
+      btnNavHost.className = "mbot-btn mbot-btn-lime";
+      btnNavHost.onclick = () => this.openHostModal();
     }
   }
 
   _getInviteUrl() {
     if (this.tunnelUrl) return this.tunnelUrl;
+    if (this.session?.public_url) return this.session.public_url;
+    const isGitHubPages = window.location.hostname.endsWith("github.io");
+    if (isGitHubPages) {
+      const code = this.session?.session_code || "FRI-READY";
+      const base = window.location.origin + window.location.pathname;
+      return `${base}?room=${code}`;
+    }
     if (!this.session) return window.location.origin;
-    if (this.session.public_url) return this.session.public_url;
     const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
     if (isRemote) return window.location.origin;
     const ip = this.session.primary_ip || window.location.hostname;

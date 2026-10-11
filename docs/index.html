@@ -49,10 +49,10 @@
 
         <div class="landing-header-actions" id="landingHeaderActions">
           <button class="mbot-btn mbot-btn-tan" id="btnNavJoin" style="padding: 8px 18px; font-size: 13px;">
-            Join Session
+            Join Workspace
           </button>
           <button class="mbot-btn mbot-btn-lime" id="btnNavHost" style="padding: 8px 20px; font-size: 13px;">
-            <span>Host Session</span>
+            <span>Create Workspace</span>
             <span class="mbot-arrow-track" aria-hidden="true">
               <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg primary"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
               <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg clone"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
@@ -85,7 +85,7 @@
         <div class="hero-cta-group">
           <!-- Primary CTA Button with Sliding Arrow -->
           <button class="mbot-btn mbot-btn-lime" id="btnOpenHostModal">
-            <span>Start Hosting</span>
+            <span>Create Workspace</span>
             <span class="mbot-arrow-track" aria-hidden="true">
               <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg primary"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
               <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg clone"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
@@ -94,7 +94,7 @@
 
           <!-- Secondary CTA -->
           <button class="mbot-btn mbot-btn-tan" id="btnOpenJoinModal">
-            <span>Join with Code</span>
+            <span>Join Workspace</span>
           </button>
         </div>
       </div>
@@ -268,10 +268,11 @@
             <span class="wordmark-badge">P2P</span>
           </a>
           <div class="topbar-divider"></div>
-          <div class="workspace-project-badge">
+          <button class="topbar-switch-btn" id="btnSwitchWorkspace" title="Switch or create workspaces">
             <span id="topbarProjectName">Workspace</span>
+            <span class="topbar-chevron">▾</span>
             <span class="badge-role host" id="topbarRoleBadge">Host</span>
-          </div>
+          </button>
         </div>
 
         <div class="topbar-center">
@@ -354,6 +355,9 @@
               </button>
               <button class="icon-btn" id="btnNewFolder" title="New Folder">
                 <span id="newFolderIcon"></span>
+              </button>
+              <button class="icon-btn" id="btnDownloadWorkspace" title="Download workspace files">
+                <span id="downloadWorkspaceIcon"></span>
               </button>
               <button class="icon-btn" id="btnRefreshFiles" title="Refresh Files">
                 <span id="refreshIcon"></span>
@@ -510,23 +514,54 @@
          MODALS & DIALOGS (MailerBot Industrial Finish)
          =================================================================== -->
 
-    <!-- Host Session Modal -->
+    <!-- Host / Create Workspace Modal -->
     <div class="modal-backdrop" id="hostModal">
-      <div class="modal-box">
+      <div class="modal-box" style="max-width: 520px;">
         <div class="modal-header">
           <div class="modal-title">
             <span id="modalHostIcon"></span>
-            <span>Host FriKode Session</span>
+            <span>Create & Host Workspace</span>
           </div>
           <button class="modal-close-btn" id="btnCloseHostModal">✕</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
             <label class="form-label" for="hostWorkspaceInput">
-              Workspace Folder
+              Workspace Name
             </label>
-            <input type="text" class="form-input mono" id="hostWorkspaceInput" value="sample_project" placeholder="Path to workspace folder">
-            <span class="form-help">Files on this laptop will be shared directly with peers over your local Wi-Fi.</span>
+            <input type="text" class="form-input" id="hostWorkspaceInput" value="My Project" placeholder="e.g. My Project, Algorithms Lab">
+            <span class="form-help">Enter a name for your collaborative workspace.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Select Workspace Starter</label>
+            <div class="template-grid" id="hostTemplateGrid">
+              <div class="template-card selected" data-template="python">
+                <div class="template-icon">🐍</div>
+                <div class="template-name">Python</div>
+                <div class="template-desc">main.py starter</div>
+              </div>
+              <div class="template-card" data-template="web">
+                <div class="template-icon">🌐</div>
+                <div class="template-name">Web App</div>
+                <div class="template-desc">HTML + CSS + JS</div>
+              </div>
+              <div class="template-card" data-template="c">
+                <div class="template-icon">⚡</div>
+                <div class="template-name">C / C++</div>
+                <div class="template-desc">main.c starter</div>
+              </div>
+              <div class="template-card" data-template="blank">
+                <div class="template-icon">📝</div>
+                <div class="template-name">Blank</div>
+                <div class="template-desc">Clean project</div>
+              </div>
+              <div class="template-card" data-template="folder" id="cardTemplateFolder">
+                <div class="template-icon">📁</div>
+                <div class="template-name">Open Folder</div>
+                <div class="template-desc">Pick from device</div>
+              </div>
+            </div>
           </div>
 
           <div class="form-group">
@@ -548,20 +583,20 @@
             <div class="tunnel-toggle-header">
               <div class="tunnel-toggle-title">
                 <span id="modalHostGlobeIcon"></span>
-                <span>Enable Remote Access (Different Wi-Fi)</span>
+                <span>Enable Real-Time Collaboration</span>
               </div>
               <label class="toggle-switch">
-                <input type="checkbox" id="hostEnableTunnelCheckbox">
+                <input type="checkbox" id="hostEnableTunnelCheckbox" checked>
                 <span class="toggle-slider"></span>
               </label>
             </div>
             <p class="tunnel-toggle-desc">
-              Creates a secure public link so teammates anywhere in the world can join over the internet without needing the same local Wi-Fi router.
+              Creates a live room code & invite link so teammates anywhere can join and edit with you in real time.
             </p>
           </div>
 
           <!-- Network Info Review -->
-          <div class="network-info-card">
+          <div class="network-info-card" id="hostNetworkInfoCard">
             <div class="network-field" id="modalHostPublicRow" style="display: none;">
               <span class="network-field-label">Remote Link (Anywhere)</span>
               <div class="network-field-value">
@@ -591,14 +626,14 @@
             </div>
           </div>
 
-          <div style="background: var(--canvas-bg); border: 1.5px solid var(--canvas-border); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.45; color: var(--text-dark);">
-            <strong>Host Requirement:</strong> Keep this laptop awake and FriKode running. All files remain securely on your local hard drive.
+          <div style="background: var(--canvas-bg); border: 1.5px solid var(--canvas-border); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.45; color: var(--text-dark);" id="hostNoticeText">
+            <strong>Workspace Storage:</strong> Files are saved securely in your browser and sync with collaborators in real time.
           </div>
         </div>
         <div class="modal-footer">
           <button class="mbot-btn mbot-btn-tan" id="btnCancelHost" style="padding: 8px 18px; font-size: 13px;">Cancel</button>
           <button class="mbot-btn mbot-btn-lime" id="btnConfirmHost" style="padding: 8px 20px; font-size: 13px;">
-            <span>Enter Workspace</span>
+            <span>Create Workspace</span>
             <span class="mbot-arrow-track" aria-hidden="true">
               <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg primary"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
               <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg clone"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
@@ -861,6 +896,30 @@
         </div>
         <div class="modal-footer">
           <button class="mbot-btn mbot-btn-tan" id="btnCloseRemoteModalFooter" style="padding: 8px 18px; font-size: 13px;">Close</button>
+        </div>
+      </div>
+    <!-- Switch Workspace Modal -->
+    <div class="modal-backdrop" id="switchWorkspaceModal">
+      <div class="modal-box" style="max-width: 480px;">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span id="modalSwitchIcon"></span>
+            <span>My Workspaces</span>
+          </div>
+          <button class="modal-close-btn" id="btnCloseSwitchWorkspaceModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="workspace-list" id="savedWorkspacesList">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+        <div class="modal-footer" style="justify-content: space-between;">
+          <button class="mbot-btn mbot-btn-tan" id="btnCreateNewWorkspaceFromModal" style="padding: 8px 16px; font-size: 13px;">
+            <span>+ New Workspace</span>
+          </button>
+          <button class="mbot-btn mbot-btn-lime" id="btnCloseSwitchModalFooter" style="padding: 8px 16px; font-size: 13px;">
+            <span>Done</span>
+          </button>
         </div>
       </div>
     </div>
