@@ -1029,6 +1029,42 @@ class FriKodeApp {
       const roomName = `frikode-${cleanCode}-presence`;
       const doc = new Y.Doc();
       this._presenceProvider = new WebsocketProvider(wsUrl, roomName, doc, { connect: true });
+      this._filesMap = doc.getMap("workspace_files");
+
+      // Synchronize workspace files from the shared map in real time
+      this._filesMap.observe(() => {
+        this._syncFilesFromMap();
+      });
+
+      // When the presence room finishes initial synchronization:
+      this._presenceProvider.on("sync", (isSynced) => {
+        if (isSynced) {
+          if (this._filesMap.size === 0) {
+            // First peer (Host) in the room: publish local active workspace files
+            const activeWs = this.workspaceStore.getActiveWorkspace();
+            if (activeWs && activeWs.files) {
+              Object.values(activeWs.files).forEach(f => {
+                this._filesMap.set(f.path, {
+                  path: f.path,
+                  name: f.name,
+                  is_dir: !!f.is_dir,
+                  size: f.size || 0
+                });
+              });
+            }
+          } else {
+            // Joining peer: receive all files from the workspace
+            this._syncFilesFromMap();
+          }
+        }
+      });
+
+      // Liveness fallback for sync
+      setTimeout(() => {
+        if (this._filesMap && this._filesMap.size > 0) {
+          this._syncFilesFromMap();
+        }
+      }, 1000);
 
       const currentFile = this.editorManager?.getActiveFile() || "";
       this._presenceProvider.awareness.setLocalStateField("user", {
@@ -1051,6 +1087,34 @@ class FriKodeApp {
       });
     } catch (err) {
       console.warn("[FriKode] Static presence relay error:", err);
+    }
+  }
+
+  _syncFilesFromMap() {
+    if (!this._filesMap || this._filesMap.size === 0) return;
+    const remoteFiles = {};
+    this._filesMap.forEach((meta, path) => {
+      remoteFiles[path] = {
+        path,
+        name: meta.name || path.split("/").pop(),
+        is_dir: !!meta.is_dir,
+        size: meta.size || 0
+      };
+    });
+
+    // Update active workspace in local WorkspaceStore so it persists
+    const activeWs = this.workspaceStore.getActiveWorkspace();
+    if (activeWs) {
+      activeWs.files = remoteFiles;
+      this.workspaceStore.saveWorkspace(activeWs);
+    }
+
+    this.treeData = this.workspaceStore.toTree(remoteFiles);
+    this._renderFileTree();
+
+    // If no tab is currently open, open default or teammate's active file
+    if (!this.editorManager?.activePath && this.treeData.length > 0) {
+      this._openDefaultFile();
     }
   }
 
@@ -1311,11 +1375,20 @@ class FriKodeApp {
   }
 
   _openDefaultFile() {
-    // Look for README.md or main.py
+    // If joining a session where a teammate is already active on a file, join their file
+    if (this.role === "participant" && this.peers.length > 0) {
+      const activePeer = this.peers.find(p => !p.isLocal && p.active_file);
+      if (activePeer && activePeer.active_file) {
+        this.editorManager.openFile(activePeer.active_file);
+        return;
+      }
+    }
+
+    // Look for main.py, index.html, or first code file
     const findNode = (items) => {
       for (const item of items) {
         if (!item.is_dir) {
-          if (item.name.toLowerCase() === "readme.md" || item.name.toLowerCase() === "main.py") {
+          if (item.name.toLowerCase() === "main.py" || item.name.toLowerCase() === "index.html" || item.name.toLowerCase() === "readme.md") {
             return item;
           }
         }
@@ -1985,6 +2058,17 @@ You are currently viewing FriKode hosted live on GitHub Pages!
         content: ""
       };
       this.workspaceStore.saveWorkspace(activeWs);
+
+      // Broadcast to shared static workspace presence room so all peers see the new file
+      if (this._filesMap) {
+        this._filesMap.set(name, {
+          path: name,
+          name: name.split("/").pop(),
+          is_dir: isFolder,
+          size: 0
+        });
+      }
+
       this.closeModal("createEntryModal");
       await this.loadFiles();
       if (!isFolder) {
@@ -2022,6 +2106,12 @@ You are currently viewing FriKode hosted live on GitHub Pages!
     if (activeWs && activeWs.files) {
       delete activeWs.files[this.pendingDeletePath];
       this.workspaceStore.saveWorkspace(activeWs);
+
+      // Broadcast deletion to shared static presence room
+      if (this._filesMap) {
+        this._filesMap.delete(this.pendingDeletePath);
+      }
+
       this.editorManager.closeTab(this.pendingDeletePath);
       this.closeModal("deleteConfirmModal");
       await this.loadFiles();
@@ -2300,8 +2390,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   async runCurrentCode(withStdin = false) {
     if (!this.editorManager) return;
     const activePath = this.editorManager.activePath;
-    const activeDoc = this.editorManager.doc;
-    const currentCode = activeDoc ? activeDoc.toString() : "";
+    const currentCode = this.editorManager.getValue();
 
     if (!activePath && !currentCode.trim()) {
       showToast("Open or create a file to run code", "info");
@@ -2343,6 +2432,35 @@ You are currently viewing FriKode hosted live on GitHub Pages!
     pre.innerHTML += `<span class="output-system">${this._escapeHtml(startNotice)}</span>`;
     pre.scrollTop = pre.scrollHeight;
 
+    const isStandaloneStatic = this._isStaticMode();
+    const isPython = activePath?.endsWith(".py") || (!activePath?.endsWith(".js") && (currentCode.includes("print(") || currentCode.includes("def ") || currentCode.includes("import ")));
+    const isJs = activePath?.endsWith(".js") || activePath?.endsWith(".html");
+
+    // If running in standalone static web mode (GitHub Pages), execute directly in browser!
+    if (isStandaloneStatic) {
+      try {
+        if (isPython) {
+          await this._runPythonInBrowser(currentCode, stdinVal, pre, statusBadge, beacon, statusDot);
+        } else if (isJs) {
+          this._runJavaScriptInBrowser(currentCode, pre, statusBadge, beacon, statusDot);
+        } else {
+          pre.innerHTML += `<span class="output-dim">[FriKode Web Preview Sandbox]\n</span>`;
+          pre.innerHTML += `<span class="output-stdout">✓ Code ready in web mode.\nTo compile C/C++ or Rust natively with gcc/clang, connect to a live FriKode Python host or run: python3 run.py\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status success";
+            statusBadge.textContent = "Web Preview";
+          }
+          if (beacon) beacon.className = "compiler-beacon success";
+          if (statusDot) statusDot.className = "status-mini-dot active";
+        }
+      } finally {
+        if (btnRun) btnRun.classList.remove("running");
+        if (runText) runText.textContent = "Run";
+        pre.scrollTop = pre.scrollHeight;
+      }
+      return;
+    }
+
     try {
       const res = await api.runCode({
         path: activePath,
@@ -2353,41 +2471,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
 
       // If language was JavaScript and host doesn't have Node, evaluate in browser safely
       if (res.client_eval) {
-        pre.innerHTML += `<span class="output-dim">[Browser JS Engine] Running JavaScript in sandbox...\n</span>`;
-        let jsLogs = [];
-        const origLog = console.log;
-        const origErr = console.error;
-        const startTime = performance.now();
-        try {
-          console.log = (...args) => {
-            jsLogs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
-          };
-          console.error = (...args) => {
-            jsLogs.push("[Error] " + args.join(" "));
-          };
-          const fn = new Function(currentCode);
-          fn();
-          const elapsed = Math.round(performance.now() - startTime);
-          const out = jsLogs.join("\n");
-          if (out) pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(out)}\n</span>`;
-          pre.innerHTML += `<span class="output-success">✓ Executed in browser in ${elapsed}ms\n</span>`;
-          if (statusBadge) {
-            statusBadge.className = "compiler-badge status success";
-            statusBadge.textContent = `Browser JS (${elapsed}ms)`;
-          }
-          if (beacon) beacon.className = "compiler-beacon success";
-          if (statusDot) statusDot.className = "status-mini-dot active";
-        } catch (evalErr) {
-          pre.innerHTML += `<span class="output-stderr">Runtime Error: ${this._escapeHtml(evalErr.message)}\n</span>`;
-          if (statusBadge) {
-            statusBadge.className = "compiler-badge status error";
-            statusBadge.textContent = "Error";
-          }
-          if (beacon) beacon.className = "compiler-beacon error";
-        } finally {
-          console.log = origLog;
-          console.error = origErr;
-        }
+        this._runJavaScriptInBrowser(currentCode, pre, statusBadge, beacon, statusDot);
       } else {
         // Output stdout if any
         if (res.stdout) {
@@ -2437,53 +2521,10 @@ You are currently viewing FriKode hosted live on GitHub Pages!
         }
       }
     } catch (err) {
-      const isStandaloneStatic = this._isStaticMode();
-      const isJs = activePath?.endsWith(".js") || activePath?.endsWith(".html");
-      if (isJs) {
-        pre.innerHTML += `<span class="output-dim">[Browser JS Engine] Running JavaScript in sandbox...\n</span>`;
-        let jsLogs = [];
-        const origLog = console.log;
-        const origErr = console.error;
-        const startTime = performance.now();
-        try {
-          console.log = (...args) => {
-            jsLogs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
-          };
-          console.error = (...args) => {
-            jsLogs.push("[Error] " + args.join(" "));
-          };
-          const fn = new Function(currentCode);
-          fn();
-          const elapsed = Math.round(performance.now() - startTime);
-          const out = jsLogs.join("\n");
-          if (out) pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(out)}\n</span>`;
-          pre.innerHTML += `<span class="output-success">✓ Executed in browser sandbox in ${elapsed}ms\n</span>`;
-          if (statusBadge) {
-            statusBadge.className = "compiler-badge status success";
-            statusBadge.textContent = `Browser JS (${elapsed}ms)`;
-          }
-          if (beacon) beacon.className = "compiler-beacon success";
-          if (statusDot) statusDot.className = "status-mini-dot active";
-        } catch (evalErr) {
-          pre.innerHTML += `<span class="output-stderr">Runtime Error: ${this._escapeHtml(evalErr.message)}\n</span>`;
-          if (statusBadge) {
-            statusBadge.className = "compiler-badge status error";
-            statusBadge.textContent = "Error";
-          }
-          if (beacon) beacon.className = "compiler-beacon error";
-        } finally {
-          console.log = origLog;
-          console.error = origErr;
-        }
-      } else if (isStandaloneStatic) {
-        pre.innerHTML += `<span class="output-dim">[FriKode Web Preview Sandbox]\n</span>`;
-        pre.innerHTML += `<span class="output-stdout">✓ Code ready in web preview mode.\nTo compile and execute natively with gcc/clang/python, connect to an active FriKode host or run: python3 run.py\n</span>`;
-        if (statusBadge) {
-          statusBadge.className = "compiler-badge status success";
-          statusBadge.textContent = "Web Preview";
-        }
-        if (beacon) beacon.className = "compiler-beacon success";
-        if (statusDot) statusDot.className = "status-mini-dot active";
+      if (isPython) {
+        await this._runPythonInBrowser(currentCode, stdinVal, pre, statusBadge, beacon, statusDot);
+      } else if (isJs) {
+        this._runJavaScriptInBrowser(currentCode, pre, statusBadge, beacon, statusDot);
       } else {
         pre.innerHTML += `<span class="output-stderr">Failed to reach execution runner: ${this._escapeHtml(err.message || String(err))}\n</span>`;
         if (statusBadge) {
@@ -2498,6 +2539,120 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       pre.scrollTop = pre.scrollHeight;
     }
   }
+
+  async _runPythonInBrowser(code, stdinVal, pre, statusBadge, beacon, statusDot) {
+    const startTime = performance.now();
+    pre.innerHTML += `<span class="output-dim">[Python WebAssembly Engine] Initializing in-browser Python runtime...\n</span>`;
+    pre.scrollTop = pre.scrollHeight;
+
+    try {
+      if (!window._pyodideInstance) {
+        if (!window.loadPyodide) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js";
+            script.onload = resolve;
+            script.onerror = () => reject(new Error("Could not load Python WebAssembly runtime from CDN. Check your internet connection."));
+            document.head.appendChild(script);
+          });
+        }
+        window._pyodideInstance = await window.loadPyodide();
+      }
+
+      const pyodide = window._pyodideInstance;
+      const stdoutBuf = [];
+      const stderrBuf = [];
+
+      pyodide.setStdout({ batched: (msg) => stdoutBuf.push(msg) });
+      pyodide.setStderr({ batched: (msg) => stderrBuf.push(msg) });
+
+      if (stdinVal) {
+        const stdinLines = stdinVal.split("\n");
+        let stdinIndex = 0;
+        pyodide.setStdin({
+          stdin: () => {
+            if (stdinIndex < stdinLines.length) {
+              return stdinLines[stdinIndex++];
+            }
+            return "";
+          }
+        });
+      }
+
+      await pyodide.runPythonAsync(code);
+
+      const elapsed = Math.round(performance.now() - startTime);
+      const out = stdoutBuf.join("\n");
+      const err = stderrBuf.join("\n");
+
+      if (out) {
+        pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(out)}\n</span>`;
+      }
+      if (err) {
+        pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(err)}\n</span>`;
+      }
+
+      pre.innerHTML += `<span class="output-success">✓ Process finished with exit code 0 (${elapsed}ms)\n</span>`;
+      if (statusBadge) {
+        statusBadge.className = "compiler-badge status success";
+        statusBadge.textContent = `Python Wasm (${elapsed}ms)`;
+      }
+      if (beacon) beacon.className = "compiler-beacon success";
+      if (statusDot) statusDot.className = "status-mini-dot active";
+    } catch (pyErr) {
+      const elapsed = Math.round(performance.now() - startTime);
+      const errStr = pyErr.message || String(pyErr);
+      pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(errStr)}\n</span>`;
+      if (statusBadge) {
+        statusBadge.className = "compiler-badge status error";
+        statusBadge.textContent = `Python Error (${elapsed}ms)`;
+      }
+      if (beacon) beacon.className = "compiler-beacon error";
+      if (statusDot) statusDot.className = "status-mini-dot";
+    } finally {
+      pre.scrollTop = pre.scrollHeight;
+    }
+  }
+
+  _runJavaScriptInBrowser(code, pre, statusBadge, beacon, statusDot) {
+    pre.innerHTML += `<span class="output-dim">[Browser JS Engine] Running JavaScript in sandbox...\n</span>`;
+    let jsLogs = [];
+    const origLog = console.log;
+    const origErr = console.error;
+    const startTime = performance.now();
+    try {
+      console.log = (...args) => {
+        jsLogs.push(args.map(a => typeof a === "object" ? JSON.stringify(a, null, 2) : String(a)).join(" "));
+      };
+      console.error = (...args) => {
+        jsLogs.push("[Error] " + args.join(" "));
+      };
+      const fn = new Function(code);
+      fn();
+      const elapsed = Math.round(performance.now() - startTime);
+      const out = jsLogs.join("\n");
+      if (out) pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(out)}\n</span>`;
+      pre.innerHTML += `<span class="output-success">✓ Executed in browser sandbox in ${elapsed}ms\n</span>`;
+      if (statusBadge) {
+        statusBadge.className = "compiler-badge status success";
+        statusBadge.textContent = `Browser JS (${elapsed}ms)`;
+      }
+      if (beacon) beacon.className = "compiler-beacon success";
+      if (statusDot) statusDot.className = "status-mini-dot active";
+    } catch (evalErr) {
+      pre.innerHTML += `<span class="output-stderr">Runtime Error: ${this._escapeHtml(evalErr.message)}\n</span>`;
+      if (statusBadge) {
+        statusBadge.className = "compiler-badge status error";
+        statusBadge.textContent = "Error";
+      }
+      if (beacon) beacon.className = "compiler-beacon error";
+      if (statusDot) statusDot.className = "status-mini-dot";
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+    }
+  }
+
 
   toggleCompilerPanel(forceOpen = null) {
     const panel = document.getElementById("compilerPanel");

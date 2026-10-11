@@ -45,6 +45,14 @@ export class EditorManager {
     return this.activePath || "";
   }
 
+  getValue() {
+    if (this.cm) return this.cm.getValue();
+    if (this.activePath && this.openTabs.has(this.activePath)) {
+      return this.openTabs.get(this.activePath).ytext.toString();
+    }
+    return "";
+  }
+
   _isStaticMode() {
     return (window.location.hostname.endsWith("github.io") || window.location.protocol === "file:") && !api.baseUrl;
   }
