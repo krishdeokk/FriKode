@@ -23,6 +23,7 @@ export class EditorManager {
     this.onFileSave = onFileSave || (() => {});
 
     this.sessionCode = null;
+    this.role = "host";
 
     this.user = {
       name: "Anonymous",
@@ -30,11 +31,15 @@ export class EditorManager {
     };
 
     this.cm = null;
-    this.openTabs = new Map(); // path -> { path, name, ydoc, provider, binding, dirty, lang }
+    this.openTabs = new Map(); // path -> { path, name, ydoc, ytext, ymeta, provider, binding, dirty, lang }
     this.activePath = null;
     this.autoSaveTimer = null;
 
     this._initCodeMirror();
+  }
+
+  setRole(role) {
+    this.role = role || "host";
   }
 
   setSessionCode(code) {
@@ -157,9 +162,12 @@ export class EditorManager {
     const filename = path.split("/").pop();
     const mode = this._getModeForPath(path);
 
-    // If initialContent is not supplied, fetch from REST API
-    let content = initialContent;
-    if (content === null) {
+    // If user is a participant joining a session, never use initialContent to overwrite the room
+    const isParticipant = this.role === "participant";
+    let content = isParticipant ? null : initialContent;
+
+    // If initialContent is not supplied and this is the host on a backend server, fetch from REST API
+    if (content === null && !this._isStaticMode() && !isParticipant) {
       try {
         const fileData = await api.getFile(path);
         content = fileData.content || "";
@@ -172,6 +180,7 @@ export class EditorManager {
     // Initialize Yjs CRDT room for this file
     const ydoc = new Y.Doc();
     const ytext = ydoc.getText("content");
+    const ymeta = ydoc.getMap("meta");
 
     // Establish WebSocket provider to server room
     let host = window.location.host;
@@ -200,12 +209,35 @@ export class EditorManager {
     const provider = new WebsocketProvider(wsUrl, roomName, ydoc, { connect: true });
 
     // Populate initial content safely:
-    // If room already has text from teammates, keep teammates' text!
-    // Only insert initialContent if the document is genuinely empty once synced.
+    // 1. Participants NEVER insert initial content (they strictly receive what is already in the room).
+    // 2. Once a document is marked initialized in the CRDT (ymeta.get("initialized") === true), it is never overwritten.
+    // 3. If ytext already has any text from peers upon sync, preserve peers' text.
+    // 4. Erasing code or clearing a file (ytext.toString() === "") is a deliberate user edit, NEVER a reason to reset.
     let initialApplied = false;
     const applyInitial = () => {
-      if (!initialApplied && content && ytext.toString() === "") {
+      if (initialApplied) return;
+      if (this.role === "participant") {
         initialApplied = true;
+        return;
+      }
+      if (ymeta.get("initialized")) {
+        initialApplied = true;
+        return;
+      }
+      if (ytext.toString().length > 0) {
+        initialApplied = true;
+        ymeta.set("initialized", true);
+        return;
+      }
+      // If the document has any recorded client transactions, it has already been edited
+      if (ydoc.store.clients.size > 0 && ymeta.get("initialized")) {
+        initialApplied = true;
+        return;
+      }
+
+      initialApplied = true;
+      ymeta.set("initialized", true);
+      if (content) {
         ytext.insert(0, content);
       }
     };
@@ -216,8 +248,12 @@ export class EditorManager {
       }
     });
 
-    // Fallback if offline or standalone room doesn't emit sync within 1.2s
-    setTimeout(applyInitial, 1200);
+    // Fallback if offline or standalone room doesn't emit sync within 3.5s (ONLY for host, NEVER for participant)
+    setTimeout(() => {
+      if (!provider.synced && this.role !== "participant" && !ymeta.get("initialized")) {
+        applyInitial();
+      }
+    }, 3500);
 
     // Set user awareness (presence name, cursor color, and active file)
     provider.awareness.setLocalStateField("user", {
@@ -245,6 +281,7 @@ export class EditorManager {
       name: filename,
       ydoc,
       ytext,
+      ymeta,
       provider,
       binding: null,
       dirty: false,

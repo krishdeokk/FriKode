@@ -462,10 +462,20 @@ class FriKodeApp {
           }
           this.workspaceStore.saveWorkspace(activeWs);
         }
+        if (this._filesMap) {
+          this._filesMap.set(path, {
+            path,
+            name: path.split("/").pop(),
+            is_dir: false,
+            size: content.length,
+            content
+          });
+        }
       }
     });
 
     this.editorManager.setUser(this.user.name, this.user.color);
+    this.editorManager.setRole(this.role);
   }
 
   _bindEvents() {
@@ -783,6 +793,7 @@ class FriKodeApp {
 
       this.role = "host";
       this.editorManager?.setUser(this.user.name, this.user.color);
+      this.editorManager?.setRole("host");
       this.editorManager?.setSessionCode(this.session.session_code);
 
       this.closeModal("hostModal");
@@ -1039,7 +1050,7 @@ class FriKodeApp {
       // When the presence room finishes initial synchronization:
       this._presenceProvider.on("sync", (isSynced) => {
         if (isSynced) {
-          if (this._filesMap.size === 0) {
+          if (this._filesMap.size === 0 && this.role === "host") {
             // First peer (Host) in the room: publish local active workspace files
             const activeWs = this.workspaceStore.getActiveWorkspace();
             if (activeWs && activeWs.files) {
@@ -1048,7 +1059,8 @@ class FriKodeApp {
                   path: f.path,
                   name: f.name,
                   is_dir: !!f.is_dir,
-                  size: f.size || 0
+                  size: f.size || 0,
+                  content: f.content !== undefined ? f.content : ""
                 });
               });
             }
@@ -1098,7 +1110,8 @@ class FriKodeApp {
         path,
         name: meta.name || path.split("/").pop(),
         is_dir: !!meta.is_dir,
-        size: meta.size || 0
+        size: meta.size || 0,
+        content: meta.content !== undefined ? meta.content : undefined
       };
     });
 
@@ -1269,6 +1282,7 @@ class FriKodeApp {
           };
 
           this.editorManager?.setUser(this.user.name, this.user.color);
+          this.editorManager?.setRole("participant");
           this.editorManager?.setSessionCode(cleanCode);
           this.closeModal("joinModal");
           await this.enterWorkspace();
@@ -1308,6 +1322,7 @@ class FriKodeApp {
       }
 
       this.editorManager?.setUser(this.user.name, this.user.color);
+      this.editorManager?.setRole("participant");
       this.closeModal("joinModal");
       await this.enterWorkspace();
     } catch (err) {
@@ -1417,7 +1432,8 @@ class FriKodeApp {
     }
 
     if (targetNode) {
-      this.editorManager.openFile(targetNode.path, targetNode.content !== undefined ? targetNode.content : null);
+      const initial = (this.role === "participant") ? null : (targetNode.content !== undefined ? targetNode.content : null);
+      this.editorManager.openFile(targetNode.path, initial);
     }
   }
 
@@ -1585,7 +1601,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
           `;
 
           rowEl.onclick = () => {
-            const initial = node.content !== undefined ? node.content : null;
+            const initial = (this.role === "participant") ? null : (node.content !== undefined ? node.content : null);
             this.editorManager.openFile(node.path, initial);
             this._renderFileTree();
             this.toggleMobileSidebar(false);
