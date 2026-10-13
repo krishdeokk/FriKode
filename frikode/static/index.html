@@ -346,11 +346,11 @@
             </div>
           </button>
 
-          <!-- Sync Status -->
-          <div class="sync-status-badge" id="syncStatusBadge" title="Save status to host disk">
+          <!-- Sync Status / Save Online Button -->
+          <button class="sync-status-badge sync-btn" id="btnSyncOnline" title="Save & Sync online now (Cmd/Ctrl+S)">
             <span class="sync-dot" id="syncStatusDot"></span>
             <span id="syncStatusText">Synced</span>
-          </div>
+          </button>
 
           <!-- Run / Compile Code Button (Acid-Lime) -->
           <button class="mbot-btn mbot-btn-lime run-code-btn" id="btnRunCode" title="Run / Compile code (Cmd/Ctrl+Enter)" style="padding: 6px 14px; font-size: 12px; border-radius: 6px;">
@@ -358,10 +358,10 @@
             <span id="runBtnText">Run</span>
           </button>
 
-          <!-- Save Button (Tan) -->
-          <button class="mbot-btn mbot-btn-tan" id="btnSaveFile" title="Save file to host (Cmd/Ctrl+S)" style="padding: 6px 14px; font-size: 12px; border-radius: 6px;">
-            <span id="saveIcon"></span>
-            <span>Save</span>
+          <!-- Download Button (Tan) -->
+          <button class="mbot-btn mbot-btn-tan" id="btnDownloadFile" title="Download open file or full workspace" style="padding: 6px 14px; font-size: 12px; border-radius: 6px;">
+            <span id="downloadIcon"></span>
+            <span>Download</span>
           </button>
 
           <!-- Toggle Activity Drawer -->
@@ -388,6 +388,9 @@
               </button>
               <button class="icon-btn" id="btnNewFolder" title="New Folder">
                 <span id="newFolderIcon"></span>
+              </button>
+              <button class="icon-btn" id="btnImportFolder" title="Import Folder from device">
+                <span id="importFolderIcon"></span>
               </button>
               <button class="icon-btn" id="btnDownloadWorkspace" title="Download workspace files">
                 <span id="downloadWorkspaceIcon"></span>
@@ -427,11 +430,15 @@
                 <span>FriKode</span>
                 <span class="wordmark-badge">P2P</span>
               </div>
-              <p>Select a file from the explorer on the left to start collaborating live.</p>
+              <p>Select a file from the explorer on the left or create a new file.</p>
+              <div class="empty-state-actions" style="display: flex; gap: 10px; margin: 12px 0 16px 0;">
+                <button class="mbot-btn mbot-btn-lime" id="btnEmptyNewFile" style="padding: 7px 16px; font-size: 12px;">+ New File</button>
+                <button class="mbot-btn mbot-btn-tan" id="btnEmptyImportFolder" style="padding: 7px 16px; font-size: 12px;">📁 Import Folder</button>
+              </div>
               <div class="empty-state-shortcuts">
                 <div class="shortcut-row">
                   <kbd>Cmd</kbd> + <kbd>S</kbd> or <kbd>Ctrl</kbd> + <kbd>S</kbd>
-                  <span>Save file to host machine</span>
+                  <span>Save and sync file online</span>
                 </div>
                 <div class="shortcut-row">
                   <kbd>Cmd</kbd> + <kbd>Enter</kbd> or <kbd>Ctrl</kbd> + <kbd>Enter</kbd>
@@ -958,6 +965,61 @@
         </div>
       </div>
     </div>
+
+    <!-- Download Workspace Options Modal -->
+    <div class="modal-backdrop" id="downloadModal">
+      <div class="modal-box" style="max-width: 480px;">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span id="modalDownloadIcon"></span>
+            <span>Download Workspace</span>
+          </div>
+          <button class="modal-close-btn" id="btnCloseDownloadModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--text-dark); margin-bottom: 8px;">
+            Choose what you would like to download to your local device:
+          </p>
+
+          <div class="download-options-grid" style="display: flex; flex-direction: column; gap: 12px; margin-top: 6px;">
+            <!-- Option 1: Current Open File -->
+            <div class="download-option-card" id="cardDownloadActiveFile" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border: 1.5px solid var(--canvas-border); border-radius: 8px; background: #ffffff; cursor: pointer; transition: all 0.15s ease;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="font-size: 26px;" id="downloadFileIconEmoji">📄</div>
+                <div>
+                  <div style="font-weight: 700; font-size: 13.5px; color: var(--text-black);" id="downloadActiveFileName">Current File</div>
+                  <div style="font-size: 11.5px; color: var(--text-muted);" id="downloadActiveFileSub">Download the file currently open in editor</div>
+                </div>
+              </div>
+              <button class="mbot-btn mbot-btn-lime" id="btnDownloadCurrentFileAction" style="padding: 7px 16px; font-size: 12px; white-space: nowrap;">
+                Download File
+              </button>
+            </div>
+
+            <!-- Option 2: Full Workspace Folder (.zip) -->
+            <div class="download-option-card" id="cardDownloadFullFolder" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border: 1.5px solid var(--canvas-border); border-radius: 8px; background: #ffffff; cursor: pointer; transition: all 0.15s ease;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="font-size: 26px;">📦</div>
+                <div>
+                  <div style="font-weight: 700; font-size: 13.5px; color: var(--text-black);" id="downloadZipName">Full Workspace (.zip)</div>
+                  <div style="font-size: 11.5px; color: var(--text-muted);" id="downloadZipFileCount">Export all project files as a ZIP archive</div>
+                </div>
+              </div>
+              <button class="mbot-btn mbot-btn-lime" id="btnDownloadFullFolderAction" style="padding: 7px 16px; font-size: 12px; white-space: nowrap;">
+                Download .ZIP
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="mbot-btn mbot-btn-tan" id="btnCancelDownload" style="padding: 8px 18px; font-size: 13px;">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden file & folder upload inputs -->
+    <input type="file" id="folderImportInput" webkitdirectory directory multiple style="display: none;">
+    <input type="file" id="fileImportInput" multiple style="display: none;">
 
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>

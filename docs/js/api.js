@@ -53,12 +53,13 @@ export class FriKodeApi {
     return this._fetch("/api/session");
   }
 
-  async createSession(workspacePath, initSample = false) {
+  async createSession(workspacePath, initSample = false, template = "") {
     return this._fetch("/api/session/create", {
       method: "POST",
       body: JSON.stringify({
         workspace_path: workspacePath,
-        init_sample: initSample
+        init_sample: initSample,
+        template: template
       })
     });
   }

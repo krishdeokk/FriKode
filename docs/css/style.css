@@ -1176,9 +1176,44 @@ html, body {
   font-weight: 600;
   color: var(--text-dark);
   background: #ffffff;
-  border: 1px solid var(--canvas-border);
+  border: 1.5px solid var(--canvas-border);
   padding: 4px 10px;
   border-radius: 6px;
+}
+
+.sync-status-badge.sync-btn {
+  cursor: pointer;
+  background: #ffffff;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  line-height: normal;
+}
+
+.sync-status-badge.sync-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04);
+}
+
+.sync-status-badge.sync-btn:active {
+  transform: translateY(0);
+}
+
+.sync-status-badge.sync-btn.syncing {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+
+.download-option-card:hover {
+  border-color: #10b981 !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+}
+
+.download-option-card.disabled {
+  opacity: 0.55;
+  pointer-events: none;
+  cursor: not-allowed;
 }
 
 .sync-dot {

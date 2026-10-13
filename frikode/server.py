@@ -248,13 +248,14 @@ class FriKodeServer:
 
         new_path = data.get("workspace_path")
         init_sample = data.get("init_sample", False)
+        template = data.get("template", "")
 
         if new_path:
             abs_new_path = os.path.abspath(new_path)
             self.workspace = Workspace(abs_new_path)
             self.code_runner = CodeRunner(self.workspace.root_path)
 
-        if init_sample or self.workspace.is_empty():
+        if init_sample or (template not in ("blank", "folder") and self.workspace.is_empty()):
             self.workspace.init_sample_project()
 
         # Reset rooms for new workspace

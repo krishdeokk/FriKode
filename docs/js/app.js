@@ -11,6 +11,131 @@ import { Icons, getFileIcon } from "./icons.js";
 import { ACCENT_COLORS, getRandomColor, copyToClipboard, showToast, formatTime, safeGetStorage, safeSetStorage } from "./utils.js";
 
 /**
+ * Zero-dependency pure JavaScript client-side ZIP generator (PKZIP standard).
+ * Universally supported by macOS Archive Utility, Windows Explorer, Linux unzip, and mobile OSes.
+ */
+function createZipArchive(files) {
+  const textEncoder = new TextEncoder();
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c;
+  }
+  const calcCrc = (bytes) => {
+    let crc = 0 ^ (-1);
+    for (let i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ table[(crc ^ bytes[i]) & 0xFF];
+    return (crc ^ (-1)) >>> 0;
+  };
+
+  const fileEntries = [];
+  let offset = 0;
+
+  for (const f of files) {
+    if (!f || !f.path) continue;
+    const cleanPath = f.path.replace(/^[/\\]+/, "").replace(/\\/g, "/");
+    const nameBytes = textEncoder.encode(cleanPath);
+    const content = typeof f.content === "string" ? f.content : (f.content || "");
+    const dataBytes = textEncoder.encode(content);
+    const crc = calcCrc(dataBytes);
+    const size = dataBytes.length;
+
+    // Fixed DOS time/date (Jan 1 2026, 12:00:00)
+    const dosTime = (12 << 11) | (0 << 5) | 0;
+    const dosDate = ((2026 - 1980) << 9) | (1 << 5) | 1;
+
+    // Local file header (30 bytes + name length)
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(localHeader.buffer);
+    lv.setUint32(0, 0x04034b50, true); // Local header signature
+    lv.setUint16(4, 20, true);         // Version needed: 2.0
+    lv.setUint16(6, 0x0800, true);     // General purpose bit flag: UTF-8
+    lv.setUint16(8, 0, true);          // Compression method: 0 (stored)
+    lv.setUint16(10, dosTime, true);
+    lv.setUint16(12, dosDate, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);      // Compressed size
+    lv.setUint32(22, size, true);      // Uncompressed size
+    lv.setUint16(26, nameBytes.length, true); // Name length
+    lv.setUint16(28, 0, true);         // Extra field length
+    localHeader.set(nameBytes, 30);
+
+    fileEntries.push({
+      nameBytes,
+      dataBytes,
+      localHeader,
+      offset,
+      crc,
+      size,
+      dosTime,
+      dosDate
+    });
+
+    offset += localHeader.length + dataBytes.length;
+  }
+
+  // Central directory
+  const cdOffset = offset;
+  const cdHeaders = [];
+  let cdSize = 0;
+
+  for (const entry of fileEntries) {
+    const cdHeader = new Uint8Array(46 + entry.nameBytes.length);
+    const cv = new DataView(cdHeader.buffer);
+    cv.setUint32(0, 0x02014b50, true); // Central directory header signature
+    cv.setUint16(4, 20, true);         // Version made by: 2.0
+    cv.setUint16(6, 20, true);         // Version needed: 2.0
+    cv.setUint16(8, 0x0800, true);     // Flags: UTF-8
+    cv.setUint16(10, 0, true);         // Compression: stored
+    cv.setUint16(12, entry.dosTime, true);
+    cv.setUint16(14, entry.dosDate, true);
+    cv.setUint32(16, entry.crc, true);
+    cv.setUint32(20, entry.size, true);
+    cv.setUint32(24, entry.size, true);
+    cv.setUint16(28, entry.nameBytes.length, true);
+    cv.setUint16(30, 0, true);         // Extra field length
+    cv.setUint16(32, 0, true);         // Comment length
+    cv.setUint16(34, 0, true);         // Disk start
+    cv.setUint16(36, 0, true);         // Internal attributes
+    cv.setUint32(38, 0, true);         // External attributes
+    cv.setUint32(42, entry.offset, true); // Relative offset of local header
+    cdHeader.set(entry.nameBytes, 46);
+
+    cdHeaders.push(cdHeader);
+    cdSize += cdHeader.length;
+  }
+
+  // End of Central Directory record (22 bytes)
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);   // EOCD signature
+  ev.setUint16(4, 0, true);            // Disk number
+  ev.setUint16(6, 0, true);            // Disk start
+  ev.setUint16(8, fileEntries.length, true);  // Records on disk
+  ev.setUint16(10, fileEntries.length, true); // Total records
+  ev.setUint32(12, cdSize, true);             // Size of CD
+  ev.setUint32(16, cdOffset, true);           // Offset of start of CD
+  ev.setUint16(20, 0, true);                  // Comment length
+
+  const totalLength = cdOffset + cdSize + 22;
+  const out = new Uint8Array(totalLength);
+  let cursor = 0;
+  for (const entry of fileEntries) {
+    out.set(entry.localHeader, cursor);
+    cursor += entry.localHeader.length;
+    out.set(entry.dataBytes, cursor);
+    cursor += entry.dataBytes.length;
+  }
+  for (const cdh of cdHeaders) {
+    out.set(cdh, cursor);
+    cursor += cdh.length;
+  }
+  out.set(eocd, cursor);
+
+  return out;
+}
+
+/**
  * In-Browser Workspace Store
  * Enables every user on the website to create, save, switch, and export workspaces.
  */
@@ -147,15 +272,12 @@ class WorkspaceStore {
         size: 200,
         content: `# ${name}\n\nC/C++ Project created with FriKode.\n`
       };
+    } else if (template === "blank" || template === "folder") {
+      // Completely blank - zero starter files
+      files = {};
     } else {
-      // Blank
-      files["main.py"] = {
-        path: "main.py",
-        name: "main.py",
-        is_dir: false,
-        size: 120,
-        content: `# ${name}\n# Start writing your code here...\n`
-      };
+      // Default fallback - blank
+      files = {};
     }
 
     const ws = {
@@ -372,6 +494,9 @@ class FriKodeApp {
     setIcon("compilerClearIcon", Icons.clear);
     setIcon("compilerMaxIcon", Icons.maximize);
     setIcon("statusConsoleIcon", Icons.terminal);
+    setIcon("downloadIcon", Icons.download);
+    setIcon("modalDownloadIcon", Icons.download);
+    setIcon("importFolderIcon", Icons.upload);
     setIcon("downloadWorkspaceIcon", Icons.download);
     setIcon("modalSwitchIcon", Icons.layers);
   }
@@ -408,7 +533,12 @@ class FriKodeApp {
       onSaveStateChange: (state) => {
         const dot = document.getElementById("syncStatusDot");
         const text = document.getElementById("syncStatusText");
+        const btn = document.getElementById("btnSyncOnline");
         if (dot) dot.className = `sync-dot ${state}`;
+        if (btn) {
+          if (state === "saving") btn.classList.add("syncing");
+          else btn.classList.remove("syncing");
+        }
         if (text) {
           if (state === "synced") text.textContent = "Synced";
           else if (state === "saving") text.textContent = "Saving...";
@@ -598,9 +728,49 @@ class FriKodeApp {
       const label = this.tunnelUrl ? "Remote invite link copied!" : "Wi-Fi invite address copied!";
       copyToClipboard(fullUrl, label);
     };
-    document.getElementById("btnSaveFile").onclick = () => {
-      this.editorManager.saveCurrentFile();
-    };
+    const btnSync = document.getElementById("btnSyncOnline");
+    if (btnSync) btnSync.onclick = () => this.syncOnline();
+    const btnSave = document.getElementById("btnSaveFile");
+    if (btnSave) btnSave.onclick = () => this.syncOnline();
+
+    const btnDownload = document.getElementById("btnDownloadFile");
+    if (btnDownload) btnDownload.onclick = () => this.openDownloadModal();
+
+    bindClick("btnCloseDownloadModal", () => this.closeModal("downloadModal"));
+    bindClick("btnCancelDownload", () => this.closeModal("downloadModal"));
+    bindClick("btnDownloadCurrentFileAction", () => this.downloadActiveFile());
+    bindClick("btnDownloadFullFolderAction", () => this.downloadFullFolderZip());
+
+    const cardDlFile = document.getElementById("cardDownloadActiveFile");
+    if (cardDlFile) {
+      cardDlFile.onclick = (e) => {
+        if (e.target.tagName !== "BUTTON") this.downloadActiveFile();
+      };
+    }
+    const cardDlZip = document.getElementById("cardDownloadFullFolder");
+    if (cardDlZip) {
+      cardDlZip.onclick = (e) => {
+        if (e.target.tagName !== "BUTTON") this.downloadFullFolderZip();
+      };
+    }
+
+    const btnImportFolder = document.getElementById("btnImportFolder");
+    if (btnImportFolder) btnImportFolder.onclick = () => this.triggerFolderImport();
+
+    const btnEmptyNewFile = document.getElementById("btnEmptyNewFile");
+    if (btnEmptyNewFile) btnEmptyNewFile.onclick = () => this.openCreateEntryModal("file");
+    const btnEmptyImportFolder = document.getElementById("btnEmptyImportFolder");
+    if (btnEmptyImportFolder) btnEmptyImportFolder.onclick = () => this.triggerFolderImport();
+
+    const folderInput = document.getElementById("folderImportInput");
+    if (folderInput) {
+      folderInput.onchange = (e) => this.handleFolderFilesSelected(e.target.files);
+    }
+    const fileInput = document.getElementById("fileImportInput");
+    if (fileInput) {
+      fileInput.onchange = (e) => this.handleFolderFilesSelected(e.target.files);
+    }
+
     document.getElementById("btnToggleActivity").onclick = () => {
       const drawer = document.getElementById("activityDrawer");
       drawer.classList.toggle("collapsed");
@@ -621,9 +791,9 @@ class FriKodeApp {
     document.getElementById("btnNewFile").onclick = () => this.openCreateEntryModal("file");
     document.getElementById("btnNewFolder").onclick = () => this.openCreateEntryModal("folder");
     document.getElementById("btnRefreshFiles").onclick = () => this.loadFiles();
-    const btnDownload = document.getElementById("btnDownloadWorkspace");
-    if (btnDownload) {
-      btnDownload.onclick = () => this.downloadCurrentWorkspace();
+    const btnDownloadWs = document.getElementById("btnDownloadWorkspace");
+    if (btnDownloadWs) {
+      btnDownloadWs.onclick = () => this.openDownloadModal();
     }
 
     // Workspace Switching & Management
@@ -775,7 +945,7 @@ class FriKodeApp {
       // 1. If backend exists, create session on backend
       if (!isStandaloneStatic) {
         try {
-          const res = await api.createSession(workspaceInput, false);
+          const res = await api.createSession(workspaceInput, false, template);
           if (!this.session) this.session = {};
           this.session.session_code = res.session_code;
           this.session.workspace_name = res.workspace_name;
@@ -907,46 +1077,258 @@ class FriKodeApp {
     }
   }
 
-  downloadCurrentWorkspace() {
+  async syncOnline() {
+    const dot = document.getElementById("syncStatusDot");
+    const text = document.getElementById("syncStatusText");
+    const btn = document.getElementById("btnSyncOnline");
+
+    if (btn) btn.classList.add("syncing");
+    if (dot) dot.className = "sync-dot saving";
+    if (text) text.textContent = "Saving...";
+
+    try {
+      if (this.editorManager?.activePath) {
+        await this.editorManager.saveCurrentFile();
+      }
+
+      // Persist workspace to local store and broadcast to Yjs shared files map
+      const activeWs = this.workspaceStore.getActiveWorkspace();
+      if (activeWs && activeWs.files) {
+        this.workspaceStore.saveWorkspace(activeWs);
+        if (this._filesMap) {
+          for (const [path, f] of Object.entries(activeWs.files)) {
+            this._filesMap.set(path, f);
+          }
+        }
+      }
+
+      if (dot) dot.className = "sync-dot synced";
+      if (text) text.textContent = "Synced Online";
+      if (btn) {
+        btn.classList.remove("syncing");
+        setTimeout(() => {
+          if (text && text.textContent === "Synced Online") text.textContent = "Synced";
+        }, 2200);
+      }
+      showToast("Workspace saved & synchronized online!", "success");
+    } catch (err) {
+      console.error("Sync online error:", err);
+      if (dot) dot.className = "sync-dot error";
+      if (text) text.textContent = "Sync Error";
+      if (btn) btn.classList.remove("syncing");
+      showToast("Failed to save & sync: " + (err.message || err), "error");
+    }
+  }
+
+  openDownloadModal() {
+    const activePath = this.editorManager?.activePath;
+    const activeFileNameEl = document.getElementById("downloadActiveFileName");
+    const activeFileSubEl = document.getElementById("downloadActiveFileSub");
+    const cardActiveFile = document.getElementById("cardDownloadActiveFile");
+    const btnActiveFile = document.getElementById("btnDownloadCurrentFileAction");
+    const activeFileIconEmoji = document.getElementById("downloadFileIconEmoji");
+
+    const activeWs = this.workspaceStore.getActiveWorkspace();
+    const wsName = activeWs?.name || "workspace";
+    const zipNameEl = document.getElementById("downloadZipName");
+    const zipCountEl = document.getElementById("downloadZipFileCount");
+
+    const filesCount = activeWs?.files ? Object.values(activeWs.files).filter(f => !f.is_dir).length : 0;
+    if (zipNameEl) zipNameEl.textContent = `${wsName}.zip`;
+    if (zipCountEl) zipCountEl.textContent = `Export all ${filesCount} project files as a ZIP archive`;
+
+    if (activePath) {
+      const fileName = activePath.split("/").pop();
+      if (activeFileNameEl) activeFileNameEl.textContent = fileName;
+      if (activeFileSubEl) activeFileSubEl.textContent = `Path: ${activePath}`;
+      if (cardActiveFile) cardActiveFile.classList.remove("disabled");
+      if (btnActiveFile) btnActiveFile.disabled = false;
+      const ext = fileName.split(".").pop().toLowerCase();
+      if (["py"].includes(ext)) activeFileIconEmoji.textContent = "🐍";
+      else if (["js", "ts"].includes(ext)) activeFileIconEmoji.textContent = "⚡";
+      else if (["html", "htm"].includes(ext)) activeFileIconEmoji.textContent = "🌐";
+      else if (["c", "cpp", "h"].includes(ext)) activeFileIconEmoji.textContent = "⚙️";
+      else activeFileIconEmoji.textContent = "📄";
+    } else {
+      if (activeFileNameEl) activeFileNameEl.textContent = "No File Open";
+      if (activeFileSubEl) activeFileSubEl.textContent = "Open a file in the editor to download it individually";
+      if (cardActiveFile) cardActiveFile.classList.add("disabled");
+      if (btnActiveFile) btnActiveFile.disabled = true;
+      if (activeFileIconEmoji) activeFileIconEmoji.textContent = "📄";
+    }
+
+    this.openModal("downloadModal");
+  }
+
+  downloadActiveFile() {
+    const activePath = this.editorManager?.activePath;
+    if (!activePath) {
+      showToast("No active file to download", "info");
+      return;
+    }
+    const content = this.editorManager.getValue();
+    const fileName = activePath.split("/").pop();
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+    this.closeModal("downloadModal");
+    showToast(`Downloaded ${fileName}`, "success");
+  }
+
+  downloadFullFolderZip() {
     const activeWs = this.workspaceStore.getActiveWorkspace();
     if (!activeWs || !activeWs.files || Object.keys(activeWs.files).length === 0) {
       showToast("No files to download in workspace", "error");
       return;
     }
 
-    const files = activeWs.files;
-    const fileEntries = Object.entries(files).filter(([_, f]) => !f.is_dir);
+    // Include any latest unsaved edits from active editor tab
+    if (this.editorManager?.activePath) {
+      const currentText = this.editorManager.getValue();
+      if (activeWs.files[this.editorManager.activePath]) {
+        activeWs.files[this.editorManager.activePath].content = currentText;
+      }
+    }
+
+    const fileEntries = Object.entries(activeWs.files)
+      .filter(([_, f]) => !f.is_dir)
+      .map(([path, f]) => ({
+        path,
+        content: f.content !== undefined ? f.content : ""
+      }));
 
     if (fileEntries.length === 0) {
       showToast("Workspace is empty", "info");
       return;
     }
 
-    if (fileEntries.length === 1) {
-      const [path, f] = fileEntries[0];
-      const blob = new Blob([f.content || ""], { type: "text/plain;charset=utf-8" });
+    try {
+      const zipBytes = createZipArchive(fileEntries);
+      const blob = new Blob([zipBytes], { type: "application/zip" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = path.split("/").pop();
+      const safeWsName = (activeWs.name || "workspace").replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+      a.download = `${safeWsName}.zip`;
       a.click();
-      showToast(`Downloaded ${a.download}`, "success");
+      this.closeModal("downloadModal");
+      showToast(`Downloaded ${a.download} (${fileEntries.length} files)`, "success");
+    } catch (err) {
+      console.error("ZIP packaging error:", err);
+      showToast("Failed to create ZIP: " + (err.message || err), "error");
+    }
+  }
+
+  downloadCurrentWorkspace() {
+    this.openDownloadModal();
+  }
+
+  triggerFolderImport() {
+    const folderInput = document.getElementById("folderImportInput");
+    if (folderInput) {
+      folderInput.value = "";
+      folderInput.click();
+    }
+  }
+
+  async handleFolderFilesSelected(filesList) {
+    if (!filesList || filesList.length === 0) return;
+
+    let activeWs = this.workspaceStore.getActiveWorkspace();
+    if (!activeWs) {
+      activeWs = this.workspaceStore.createWorkspace("Imported Project", "blank");
+    }
+    if (!activeWs.files) activeWs.files = {};
+
+    let importedCount = 0;
+    let firstFilePath = null;
+
+    // Detect if files have a common root directory prefix (e.g. "my-project/src/index.js")
+    const paths = Array.from(filesList).map(f => f.webkitRelativePath || f.name);
+    let rootPrefix = "";
+    if (paths.length > 0 && paths[0].includes("/")) {
+      const firstSegment = paths[0].split("/")[0];
+      const allSharePrefix = paths.every(p => p.startsWith(firstSegment + "/"));
+      if (allSharePrefix) {
+        rootPrefix = firstSegment + "/";
+        if (activeWs.name === "My Project" || activeWs.name === "My Workspace" || activeWs.name === "Imported Project") {
+          activeWs.name = firstSegment;
+          const titleEl = document.getElementById("topbarProjectName");
+          if (titleEl) titleEl.textContent = firstSegment;
+        }
+      }
+    }
+
+    for (const file of filesList) {
+      let relPath = file.webkitRelativePath || file.name;
+      if (rootPrefix && relPath.startsWith(rootPrefix)) {
+        relPath = relPath.substring(rootPrefix.length);
+      }
+      if (!relPath) continue;
+
+      // Skip unwanted files (.git, .DS_Store, node_modules, pycache)
+      const parts = relPath.split("/");
+      if (parts.some(p => p === ".git" || p === "node_modules" || p === ".venv" || p === "__pycache__" || p === ".DS_Store")) {
+        continue;
+      }
+      if (file.name === ".DS_Store" || file.name.endsWith(".pyc")) {
+        continue;
+      }
+
+      // Check file size limit (skip files > 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        console.warn(`Skipping large file: ${relPath} (${file.size} bytes)`);
+        continue;
+      }
+
+      try {
+        const content = await file.text();
+        activeWs.files[relPath] = {
+          path: relPath,
+          name: relPath.split("/").pop(),
+          is_dir: false,
+          size: file.size,
+          content: content
+        };
+        importedCount++;
+
+        // Save to backend if backend server is running
+        if (!this._isStaticMode()) {
+          api.saveFile(relPath, content, this.user.name).catch(() => {});
+        }
+
+        if (!firstFilePath && !relPath.endsWith(".md") && !relPath.endsWith(".png") && !relPath.endsWith(".jpg")) {
+          firstFilePath = relPath;
+        }
+      } catch (err) {
+        console.warn(`Error reading ${relPath}:`, err);
+      }
+    }
+
+    if (importedCount === 0) {
+      showToast("No readable code files found in selected folder", "info");
       return;
     }
 
-    let count = 0;
-    fileEntries.forEach(([path, f], index) => {
-      setTimeout(() => {
-        const blob = new Blob([f.content || ""], { type: "text/plain;charset=utf-8" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = path.split("/").pop();
-        a.click();
-        count++;
-        if (count === fileEntries.length) {
-          showToast(`Downloaded ${count} workspace files!`, "success");
-        }
-      }, index * 200);
-    });
+    this.workspaceStore.saveWorkspace(activeWs);
+
+    // Sync to Yjs CRDT files map for all collaborators
+    if (this._filesMap) {
+      for (const [p, f] of Object.entries(activeWs.files)) {
+        this._filesMap.set(p, f);
+      }
+    }
+
+    this.treeData = this.workspaceStore.toTree(activeWs.files);
+    this._renderFileTree();
+
+    const targetToOpen = firstFilePath || Object.keys(activeWs.files)[0];
+    if (targetToOpen) {
+      this.editorManager.openFile(targetToOpen, activeWs.files[targetToOpen]?.content);
+    }
+
+    showToast(`Successfully imported ${importedCount} files into workspace!`, "success");
   }
 
   async openLocalDirectoryFolder() {
@@ -1390,6 +1772,11 @@ class FriKodeApp {
   }
 
   _openDefaultFile() {
+    if (!this.treeData || this.treeData.length === 0) {
+      this.editorManager?.closeAllTabs();
+      return;
+    }
+
     // If joining a session where a teammate is already active on a file, join their file
     if (this.role === "participant" && this.peers.length > 0) {
       const activePeer = this.peers.find(p => !p.isLocal && p.active_file);
@@ -1438,6 +1825,29 @@ class FriKodeApp {
   }
 
   async loadFiles() {
+    // 1. Identify active workspace in WorkspaceStore
+    let activeWs = null;
+    if (this.session?.session_code) {
+      activeWs = this.workspaceStore.getWorkspaceByCode(this.session.session_code);
+    }
+    if (!activeWs) {
+      activeWs = this.workspaceStore.getActiveWorkspace();
+    }
+
+    // 2. If the workspace is explicitly blank with zero files, keep it completely blank!
+    if (activeWs && (activeWs.template === "blank" || this.session?.template === "blank") && (!activeWs.files || Object.keys(activeWs.files).length === 0)) {
+      if (this.session) {
+        this.session.workspace_name = activeWs.name;
+        this.session.session_code = this.session.session_code || activeWs.session_code;
+        const titleEl = document.getElementById("topbarProjectName");
+        if (titleEl) titleEl.textContent = activeWs.name;
+      }
+      this.treeData = [];
+      this._renderFileTree();
+      this.editorManager?.closeAllTabs();
+      return;
+    }
+
     const isStandaloneStatic = this._isStaticMode();
     if (!isStandaloneStatic) {
       try {
@@ -1452,14 +1862,6 @@ class FriKodeApp {
       }
     }
 
-    // Load from local WorkspaceStore
-    let activeWs = null;
-    if (this.session?.session_code) {
-      activeWs = this.workspaceStore.getWorkspaceByCode(this.session.session_code);
-    }
-    if (!activeWs) {
-      activeWs = this.workspaceStore.getActiveWorkspace();
-    }
     if (!activeWs) {
       activeWs = this.workspaceStore.createWorkspace("My Project", "python", this.session?.session_code);
     }
@@ -1622,9 +2024,10 @@ You are currently viewing FriKode hosted live on GitHub Pages!
 
     if (this.treeData.length === 0) {
       container.innerHTML = `
-        <div style="padding: 16px; color: var(--text-muted); font-size: 12px; text-align: center;">
-          No files in workspace.<br>
-          Click + above to create one.
+        <div style="padding: 24px 14px; color: var(--text-muted); font-size: 12px; text-align: center; line-height: 1.5;">
+          <div style="font-size: 20px; margin-bottom: 6px;">📂</div>
+          <strong style="color: var(--text-dark);">Workspace is empty</strong><br>
+          Click <strong>+</strong> or <strong>Import Folder</strong> to add files.
         </div>
       `;
     } else {

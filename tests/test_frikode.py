@@ -212,6 +212,25 @@ class TestFriKodeServerIntegration(unittest.IsolatedAsyncioTestCase):
             data = await res.json()
             self.assertFalse(data.get("active"))
 
+    async def test_blank_workspace_session_creation(self):
+        blank_dir = tempfile.mkdtemp(prefix="frikode_blank_")
+        try:
+            async with self.session.post(
+                f"{self.base_url}/api/session/create",
+                json={"workspace_path": blank_dir, "init_sample": False, "template": "blank"}
+            ) as res:
+                self.assertEqual(res.status, 200)
+                data = await res.json()
+                self.assertEqual(data["status"], "ok")
+
+            # Verify files in blank workspace: should be completely empty (zero files)
+            async with self.session.get(f"{self.base_url}/api/files") as res:
+                self.assertEqual(res.status, 200)
+                data = await res.json()
+                self.assertEqual(len(data.get("tree", [])), 0)
+        finally:
+            shutil.rmtree(blank_dir, ignore_errors=True)
+
 
 class TestTunnelManager(unittest.TestCase):
     def test_tunnel_availability(self):
