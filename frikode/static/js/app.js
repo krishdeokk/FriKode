@@ -638,6 +638,18 @@ class FriKodeApp {
       });
     });
 
+    const homeView = document.getElementById("homeView");
+    const landingHeader = document.querySelector(".landing-header");
+    if (homeView && landingHeader) {
+      homeView.addEventListener("scroll", () => {
+        if (homeView.scrollTop > 24) {
+          landingHeader.classList.add("scrolled");
+        } else {
+          landingHeader.classList.remove("scrolled");
+        }
+      }, { passive: true });
+    }
+
     // Home Hero Action Buttons
     bindClick("btnHostCard", () => this.openHostModal());
     bindClick("btnOpenHostModal", (e) => { e.stopPropagation(); this.openHostModal(); });
@@ -3395,13 +3407,17 @@ You are currently viewing FriKode hosted live on GitHub Pages!
     }
     const btnNavJoin = document.getElementById("btnNavJoin");
     if (btnNavJoin) {
-      btnNavJoin.textContent = "Join Workspace";
+      btnNavJoin.innerHTML = `<span>Join Workspace</span>`;
       btnNavJoin.className = "mbot-btn mbot-btn-tan";
       btnNavJoin.onclick = () => this.openJoinModal();
     }
     const btnNavHost = document.getElementById("btnNavHost");
     if (btnNavHost) {
-      btnNavHost.innerHTML = `<span>Create Workspace</span>`;
+      btnNavHost.innerHTML = `<span>Create Workspace</span>
+        <span class="mbot-arrow-track" aria-hidden="true">
+          <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg primary"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
+          <svg viewBox="0 0 21 12" fill="none" class="mbot-arrow-svg clone"><path d="M20.0303 6.05328C20.3232 5.76039 20.3232 5.28551 20.0303 4.99262L15.2574 0.219648C14.9645 -0.073245 14.4896 -0.073245 14.1967 0.219648C13.9038 0.512542 13.9038 0.987415 14.1967 1.28031L18.4393 5.52295L14.1967 9.76559C13.9038 10.0585 13.9038 10.5334 14.1967 10.8263C14.4896 11.1191 14.9645 11.1191 15.2574 10.8263L20.0303 6.05328ZM0 5.52295V6.27295H19.5V5.52295V4.77295H0V5.52295Z" fill="currentColor"></path></svg>
+        </span>`;
       btnNavHost.className = "mbot-btn mbot-btn-lime";
       btnNavHost.onclick = () => this.openHostModal();
     }
