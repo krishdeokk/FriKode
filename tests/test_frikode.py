@@ -231,6 +231,54 @@ class TestFriKodeServerIntegration(unittest.IsolatedAsyncioTestCase):
         finally:
             shutil.rmtree(blank_dir, ignore_errors=True)
 
+    async def test_session_isolation_and_folder_import(self):
+        # 1. Create Session 1 with folder template and custom files
+        sample_files = {
+            "index.js": {"path": "index.js", "name": "index.js", "is_dir": False, "size": 30, "content": "console.log('hello session 1');"},
+            "src/utils.js": {"path": "src/utils.js", "name": "utils.js", "is_dir": False, "size": 45, "content": "export const add = (a, b) => a + b;"},
+        }
+        async with self.session.post(
+            f"{self.base_url}/api/session/create",
+            json={"workspace_path": "FolderApp", "init_sample": False, "template": "folder", "files": sample_files}
+        ) as res:
+            self.assertEqual(res.status, 200)
+            data1 = await res.json()
+            code1 = data1["session_code"]
+            self.assertTrue(code1.startswith("FRI-"))
+
+        # Verify Session 1 files
+        async with self.session.get(f"{self.base_url}/api/files", headers={"X-Session-Code": code1}) as res:
+            self.assertEqual(res.status, 200)
+            tree1 = (await res.json()).get("tree", [])
+            names1 = [item["name"] for item in tree1]
+            self.assertIn("index.js", names1)
+            self.assertIn("src", names1)
+
+        # 2. Create Session 2 as completely blank
+        async with self.session.post(
+            f"{self.base_url}/api/session/create",
+            json={"workspace_path": "BlankApp", "init_sample": False, "template": "blank"}
+        ) as res:
+            self.assertEqual(res.status, 200)
+            data2 = await res.json()
+            code2 = data2["session_code"]
+            self.assertNotEqual(code1, code2)
+
+        # Verify Session 2 files: MUST be empty and MUST NOT contain Session 1's folder/files
+        async with self.session.get(f"{self.base_url}/api/files", headers={"X-Session-Code": code2}) as res:
+            self.assertEqual(res.status, 200)
+            tree2 = (await res.json()).get("tree", [])
+            self.assertEqual(len(tree2), 0)
+
+        # Verify Session 1 files STILL remain strictly in Session 1
+        async with self.session.get(f"{self.base_url}/api/files", headers={"X-Session-Code": code1}) as res:
+            self.assertEqual(res.status, 200)
+            tree1_again = (await res.json()).get("tree", [])
+            names1_again = [item["name"] for item in tree1_again]
+            self.assertIn("index.js", names1_again)
+            self.assertIn("src", names1_again)
+
+
 
 class TestTunnelManager(unittest.TestCase):
     def test_tunnel_availability(self):

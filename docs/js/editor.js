@@ -169,12 +169,28 @@ export class EditorManager {
     // If initialContent is not supplied and this is the host on a backend server, fetch from REST API
     if (content === null && !this._isStaticMode() && !isParticipant) {
       try {
-        const fileData = await api.getFile(path);
+        const fileData = await api.getFile(path, this.sessionCode);
         content = fileData.content || "";
       } catch (err) {
         console.error("Failed to fetch file content:", err);
         content = "";
       }
+    } else if (content === null && this._isStaticMode() && !isParticipant) {
+      try {
+        const raw = localStorage.getItem("frikode_workspaces_v1");
+        if (raw) {
+          const all = JSON.parse(raw);
+          const cleanCode = (this.sessionCode || "").toUpperCase().replace(/^FRI-/, "");
+          for (const ws of Object.values(all)) {
+            if (cleanCode && ws.session_code && ws.session_code.toUpperCase().replace(/^FRI-/, "") === cleanCode) {
+              if (ws.files && ws.files[cleanPath] && ws.files[cleanPath].content !== undefined) {
+                content = ws.files[cleanPath].content;
+                break;
+              }
+            }
+          }
+        }
+      } catch (_) {}
     }
 
     // Initialize Yjs CRDT room for this file
@@ -203,7 +219,8 @@ export class EditorManager {
       roomName = `frikode-${cleanCode}-${cleanPath}`;
     } else {
       wsUrl = `${protocol}//${host}/ws/yjs`;
-      roomName = cleanPath;
+      const cleanCode = (this.sessionCode || "default").toUpperCase().trim();
+      roomName = `${cleanCode}/${cleanPath}`;
     }
 
     const provider = new WebsocketProvider(wsUrl, roomName, ydoc, { connect: true });

@@ -206,14 +206,16 @@ class WorkspaceStore {
     return null;
   }
 
-  createWorkspace(name, template = "python", customSessionCode = null) {
+  createWorkspace(name, template = "python", customSessionCode = null, customFiles = null) {
     const all = this.getAll();
     const id = "ws_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6);
     const sessionCode = customSessionCode || ("FRI-" + Math.random().toString(36).substring(2, 6).toUpperCase());
     name = (name || "").trim() || "My Workspace";
 
     let files = {};
-    if (template === "python") {
+    if (customFiles && typeof customFiles === "object" && Object.keys(customFiles).length > 0) {
+      files = { ...customFiles };
+    } else if (template === "python") {
       files["main.py"] = {
         path: "main.py",
         name: "main.py",
@@ -832,13 +834,23 @@ class FriKodeApp {
         card.classList.add("selected");
         if (card.dataset.template === "folder") {
           try {
-            await this.openLocalDirectoryFolder();
+            await this.pickFolderForHost();
           } catch (err) {
-            console.warn("Folder picker cancelled:", err);
+            console.warn("Folder picker error:", err);
           }
+        } else {
+          this._pendingFolderFiles = null;
+          this._pendingFolderName = null;
+          const descEl = document.getElementById("cardTemplateFolderDesc");
+          if (descEl) descEl.textContent = "Pick from device";
         }
       };
     });
+
+    const hostFolderInput = document.getElementById("hostFolderInput");
+    if (hostFolderInput) {
+      hostFolderInput.onchange = (e) => this._readFileInputIntoHost(e.target.files);
+    }
 
     // Create Entry Modal
     document.getElementById("btnCloseCreateEntryModal").onclick = () => this.closeModal("createEntryModal");
@@ -916,9 +928,19 @@ class FriKodeApp {
     }
     const wsInput = document.getElementById("hostWorkspaceInput");
     if (wsInput) {
-      const activeWs = this.workspaceStore.getActiveWorkspace();
-      wsInput.value = activeWs ? activeWs.name : "My Project";
+      wsInput.value = "My Project";
     }
+    this._pendingFolderFiles = null;
+    this._pendingFolderName = null;
+    const descEl = document.getElementById("cardTemplateFolderDesc");
+    if (descEl) descEl.textContent = "Pick from device";
+
+    // Reset template selection to python
+    document.querySelectorAll("#hostTemplateGrid .template-card").forEach(c => {
+      if (c.dataset.template === "python") c.classList.add("selected");
+      else c.classList.remove("selected");
+    });
+
     this._initColorSwatches("hostColorSwatches");
     this._updateNetworkUI(); // Immediate render using current origin/port
     this.openModal("hostModal"); // Open modal instantly on click
@@ -939,15 +961,21 @@ class FriKodeApp {
     const origHtml = btn ? btn.innerHTML : "";
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = `<span>Creating...</span>`;
+      btn.innerHTML = `<span>Creating workspace...</span>`;
     }
 
     try {
-      const workspaceInput = document.getElementById("hostWorkspaceInput")?.value?.trim() || "My Project";
-      const hostName = document.getElementById("hostNameInput")?.value?.trim() || safeGetStorage("frikode_name", "Developer");
-      const enableTunnel = document.getElementById("hostEnableTunnelCheckbox")?.checked ?? true;
       const selectedCard = document.querySelector("#hostTemplateGrid .template-card.selected");
       const template = selectedCard?.dataset?.template || "python";
+      let folderFiles = null;
+      if (template === "folder" && this._pendingFolderFiles && Object.keys(this._pendingFolderFiles).length > 0) {
+        folderFiles = { ...this._pendingFolderFiles };
+      }
+
+      const defaultName = template === "folder" ? (this._pendingFolderName || "Imported Project") : "My Project";
+      const workspaceInput = document.getElementById("hostWorkspaceInput")?.value?.trim() || defaultName;
+      const hostName = document.getElementById("hostNameInput")?.value?.trim() || safeGetStorage("frikode_name", "Developer");
+      const enableTunnel = document.getElementById("hostEnableTunnelCheckbox")?.checked ?? true;
 
       this.user.name = hostName;
       safeSetStorage("frikode_name", hostName);
@@ -957,21 +985,29 @@ class FriKodeApp {
       // 1. If backend exists, create session on backend
       if (!isStandaloneStatic) {
         try {
-          const res = await api.createSession(workspaceInput, false, template);
+          const res = await api.createSession(workspaceInput, false, template, folderFiles);
           if (!this.session) this.session = {};
           this.session.session_code = res.session_code;
           this.session.workspace_name = res.workspace_name;
+          api.setSessionCode(res.session_code);
         } catch (err) {
           console.warn("Backend session creation skipped/fallback:", err);
         }
       }
 
       // 2. Always persist workspace into local WorkspaceStore
-      const ws = this.workspaceStore.createWorkspace(workspaceInput, template);
+      const initialFiles = folderFiles || (template === "blank" ? {} : null);
+      const ws = this.workspaceStore.createWorkspace(workspaceInput, template, this.session?.session_code, initialFiles);
       if (!this.session) this.session = {};
       this.session.session_code = this.session.session_code || ws.session_code;
       this.session.workspace_name = ws.name;
       this.session.template = template;
+
+      // Clean up pending state
+      this._pendingFolderFiles = null;
+      this._pendingFolderName = null;
+      const descEl = document.getElementById("cardTemplateFolderDesc");
+      if (descEl) descEl.textContent = "Pick from device";
 
       this.role = "host";
       this.editorManager?.setUser(this.user.name, this.user.color);
@@ -1078,12 +1114,16 @@ class FriKodeApp {
       if (!this.session) this.session = {};
       this.session.workspace_name = ws.name;
       this.session.session_code = ws.session_code;
+      api.setSessionCode(ws.session_code);
       const titleEl = document.getElementById("topbarProjectName");
       if (titleEl) titleEl.textContent = ws.name;
       const codeEl = document.getElementById("topbarSessionCode");
       if (codeEl) codeEl.textContent = ws.session_code || "FRI-....";
       this.editorManager?.setSessionCode(ws.session_code);
       this.editorManager?.closeAllTabs();
+      if (this._isStaticMode()) {
+        this._connectStaticPresence(ws.session_code);
+      }
       await this.loadFiles();
       showToast(`Switched to "${ws.name}"`, "info");
     }
@@ -1343,60 +1383,139 @@ class FriKodeApp {
     showToast(`Successfully imported ${importedCount} files into workspace!`, "success");
   }
 
-  async openLocalDirectoryFolder() {
-    if (!window.showDirectoryPicker) {
-      showToast("Directory Picker is supported in Chrome, Edge, and desktop browsers.", "info");
-      return;
-    }
-    try {
-      const dirHandle = await window.showDirectoryPicker();
-      const wsName = dirHandle.name || "Device Project";
-      const files = {};
-
-      const readDirectory = async (handle, prefix = "") => {
-        for await (const entry of handle.values()) {
-          const fullPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-          if (entry.kind === "file") {
-            if (entry.name.startsWith(".git") || entry.name.endsWith(".pyc")) continue;
-            try {
-              const file = await entry.getFile();
-              if (file.size < 500000) {
-                const content = await file.text();
-                files[fullPath] = {
-                  path: fullPath,
-                  name: entry.name,
-                  is_dir: false,
-                  size: file.size,
-                  content: content
-                };
-              }
-            } catch (_) {}
-          } else if (entry.kind === "directory" && entry.name !== ".git" && entry.name !== "node_modules" && entry.name !== ".venv") {
-            files[fullPath] = {
-              path: fullPath,
-              name: entry.name,
-              is_dir: true,
-              size: 0,
-              content: ""
-            };
-            await readDirectory(entry, fullPath);
-          }
+  async pickFolderForHost() {
+    if (window.showDirectoryPicker) {
+      try {
+        const dirHandle = await window.showDirectoryPicker();
+        await this._readDirectoryHandleIntoHost(dirHandle);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.warn("showDirectoryPicker failed, falling back to input:", err);
+          this._triggerHostFolderFallbackInput();
         }
-      };
+      }
+    } else {
+      this._triggerHostFolderFallbackInput();
+    }
+  }
 
-      await readDirectory(dirHandle);
-      const ws = this.workspaceStore.createWorkspace(wsName, "folder");
-      ws.files = files;
-      this.workspaceStore.saveWorkspace(ws);
+  _triggerHostFolderFallbackInput() {
+    const input = document.getElementById("hostFolderInput");
+    if (input) {
+      input.value = "";
+      input.click();
+    }
+  }
 
-      const nameInput = document.getElementById("hostWorkspaceInput");
-      if (nameInput) nameInput.value = wsName;
-      showToast(`Loaded folder "${wsName}" with ${Object.keys(files).length} files!`, "success");
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        console.warn("Folder picker error:", err);
+  async _readDirectoryHandleIntoHost(dirHandle) {
+    if (!dirHandle) return;
+    const wsName = dirHandle.name || "Device Project";
+    const files = {};
+
+    const readDirectory = async (handle, prefix = "") => {
+      for await (const entry of handle.values()) {
+        const fullPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (entry.kind === "file") {
+          const parts = fullPath.split("/");
+          if (parts.some(p => p === ".git" || p === "node_modules" || p === ".venv" || p === "__pycache__" || p === ".DS_Store")) {
+            continue;
+          }
+          if (entry.name === ".DS_Store" || entry.name.endsWith(".pyc")) continue;
+          try {
+            const file = await entry.getFile();
+            if (file.size < 5 * 1024 * 1024) {
+              const content = await file.text();
+              files[fullPath] = {
+                path: fullPath,
+                name: entry.name,
+                is_dir: false,
+                size: file.size,
+                content: content
+              };
+            }
+          } catch (_) {}
+        } else if (entry.kind === "directory") {
+          if (entry.name === ".git" || entry.name === "node_modules" || entry.name === ".venv" || entry.name === "__pycache__" || entry.name === ".DS_Store") {
+            continue;
+          }
+          files[fullPath] = {
+            path: fullPath,
+            name: entry.name,
+            is_dir: true,
+            size: 0,
+            content: ""
+          };
+          await readDirectory(entry, fullPath);
+        }
+      }
+    };
+
+    await readDirectory(dirHandle);
+    this._setPendingHostFolder(wsName, files);
+  }
+
+  async _readFileInputIntoHost(filesList) {
+    if (!filesList || filesList.length === 0) return;
+    const files = {};
+    let wsName = "Device Project";
+
+    const paths = Array.from(filesList).map(f => f.webkitRelativePath || f.name);
+    let rootPrefix = "";
+    if (paths.length > 0 && paths[0].includes("/")) {
+      const firstSegment = paths[0].split("/")[0];
+      if (paths.every(p => p.startsWith(firstSegment + "/"))) {
+        rootPrefix = firstSegment + "/";
+        wsName = firstSegment;
       }
     }
+
+    for (const file of filesList) {
+      let relPath = file.webkitRelativePath || file.name;
+      if (rootPrefix && relPath.startsWith(rootPrefix)) {
+        relPath = relPath.substring(rootPrefix.length);
+      }
+      if (!relPath) continue;
+
+      const parts = relPath.split("/");
+      if (parts.some(p => p === ".git" || p === "node_modules" || p === ".venv" || p === "__pycache__" || p === ".DS_Store")) {
+        continue;
+      }
+      if (file.name === ".DS_Store" || file.name.endsWith(".pyc")) continue;
+      if (file.size > 5 * 1024 * 1024) continue;
+
+      try {
+        const content = await file.text();
+        files[relPath] = {
+          path: relPath,
+          name: relPath.split("/").pop(),
+          is_dir: false,
+          size: file.size,
+          content: content
+        };
+      } catch (_) {}
+    }
+
+    this._setPendingHostFolder(wsName, files);
+  }
+
+  _setPendingHostFolder(wsName, files) {
+    this._pendingFolderFiles = files;
+    this._pendingFolderName = wsName;
+
+    const nameInput = document.getElementById("hostWorkspaceInput");
+    if (nameInput) nameInput.value = wsName;
+
+    const fileCount = Object.values(files).filter(f => !f.is_dir).length;
+    const descEl = document.getElementById("cardTemplateFolderDesc");
+    if (descEl) descEl.textContent = `Ready: ${fileCount} files`;
+
+    const folderCard = document.getElementById("cardTemplateFolder");
+    if (folderCard) {
+      document.querySelectorAll("#hostTemplateGrid .template-card").forEach(c => c.classList.remove("selected"));
+      folderCard.classList.add("selected");
+    }
+
+    showToast(`Folder "${wsName}" selected (${fileCount} files)! Click "Create & Host Workspace" to open.`, "success");
   }
 
   _handleAwarenessPeers(states) {
@@ -1445,8 +1564,17 @@ class FriKodeApp {
       this._presenceProvider.on("sync", (isSynced) => {
         if (isSynced) {
           if (this._filesMap.size === 0 && this.role === "host") {
-            // First peer (Host) in the room: publish local active workspace files
-            const activeWs = this.workspaceStore.getActiveWorkspace();
+            // First peer (Host) in the room: publish local active workspace files for this session
+            let activeWs = null;
+            if (this.session?.session_code) {
+              activeWs = this.workspaceStore.getWorkspaceByCode(this.session.session_code);
+            }
+            if (!activeWs) {
+              const activeCandidate = this.workspaceStore.getActiveWorkspace();
+              if (activeCandidate && (!this.session?.session_code || activeCandidate.session_code === this.session.session_code)) {
+                activeWs = activeCandidate;
+              }
+            }
             if (activeWs && activeWs.files) {
               Object.values(activeWs.files).forEach(f => {
                 this._filesMap.set(f.path, {
@@ -1509,8 +1637,25 @@ class FriKodeApp {
       };
     });
 
-    // Update active workspace in local WorkspaceStore so it persists
-    const activeWs = this.workspaceStore.getActiveWorkspace();
+    // Update session workspace in local WorkspaceStore so it persists without bleeding
+    let activeWs = null;
+    if (this.session?.session_code) {
+      activeWs = this.workspaceStore.getWorkspaceByCode(this.session.session_code);
+    }
+    if (!activeWs) {
+      const activeCandidate = this.workspaceStore.getActiveWorkspace();
+      if (activeCandidate && (!this.session?.session_code || activeCandidate.session_code === this.session.session_code)) {
+        activeWs = activeCandidate;
+      }
+    }
+    if (!activeWs && this.session?.session_code) {
+      activeWs = this.workspaceStore.createWorkspace(
+        this.session.workspace_name || `Session ${this.session.session_code}`,
+        "blank",
+        this.session.session_code,
+        remoteFiles
+      );
+    }
     if (activeWs) {
       activeWs.files = remoteFiles;
       this.workspaceStore.saveWorkspace(activeWs);
@@ -1662,7 +1807,7 @@ class FriKodeApp {
         if (this._isStaticMode()) {
           let ws = this.workspaceStore.getWorkspaceByCode(cleanCode);
           if (!ws) {
-            ws = this.workspaceStore.createWorkspace(`Session ${cleanCode}`, "python", cleanCode);
+            ws = this.workspaceStore.createWorkspace(`Session ${cleanCode}`, "blank", cleanCode, {});
           } else {
             this.workspaceStore.setActiveId(ws.id);
           }
@@ -1710,6 +1855,13 @@ class FriKodeApp {
 
       try {
         this.session = await api.getSession();
+        api.setSessionCode(this.session.session_code);
+        let ws = this.workspaceStore.getWorkspaceByCode(this.session.session_code);
+        if (!ws) {
+          ws = this.workspaceStore.createWorkspace(this.session.workspace_name || `Session ${this.session.session_code}`, "blank", this.session.session_code, {});
+        } else {
+          this.workspaceStore.setActiveId(ws.id);
+        }
       } catch (err) {
         showToast(`Cannot connect to host: ${err.message || targetUrl}`, "error");
         return;
@@ -1717,6 +1869,7 @@ class FriKodeApp {
 
       this.editorManager?.setUser(this.user.name, this.user.color);
       this.editorManager?.setRole("participant");
+      this.editorManager?.setSessionCode(this.session.session_code);
       this.closeModal("joinModal");
       await this.enterWorkspace();
     } catch (err) {
@@ -1831,23 +1984,44 @@ class FriKodeApp {
     }
 
     if (targetNode) {
-      const initial = (this.role === "participant") ? null : (targetNode.content !== undefined ? targetNode.content : null);
+      let initial = null;
+      if (this.role !== "participant") {
+        if (targetNode.content !== undefined && targetNode.content !== null) {
+          initial = targetNode.content;
+        } else {
+          const activeWs = this.session?.session_code ? this.workspaceStore.getWorkspaceByCode(this.session.session_code) : this.workspaceStore.getActiveWorkspace();
+          if (activeWs && activeWs.files && activeWs.files[targetNode.path]) {
+            initial = activeWs.files[targetNode.path].content;
+          }
+        }
+      }
       this.editorManager.openFile(targetNode.path, initial);
     }
   }
 
   async loadFiles() {
-    // 1. Identify active workspace in WorkspaceStore
+    // 1. Identify active workspace in WorkspaceStore for THIS specific session
     let activeWs = null;
     if (this.session?.session_code) {
       activeWs = this.workspaceStore.getWorkspaceByCode(this.session.session_code);
     }
     if (!activeWs) {
-      activeWs = this.workspaceStore.getActiveWorkspace();
+      const activeCandidate = this.workspaceStore.getActiveWorkspace();
+      if (activeCandidate && (!this.session?.session_code || activeCandidate.session_code === this.session.session_code)) {
+        activeWs = activeCandidate;
+      }
     }
 
+    if (!activeWs) {
+      const wsName = this.session?.workspace_name || `Workspace ${this.session?.session_code || "New"}`;
+      const tpl = this.session?.template || (this.role === "participant" ? "blank" : "python");
+      activeWs = this.workspaceStore.createWorkspace(wsName, tpl, this.session?.session_code, {});
+    }
+
+    this.workspaceStore.setActiveId(activeWs.id);
+
     // 2. If the workspace is explicitly blank with zero files, keep it completely blank!
-    if (activeWs && (activeWs.template === "blank" || this.session?.template === "blank") && (!activeWs.files || Object.keys(activeWs.files).length === 0)) {
+    if ((activeWs.template === "blank" || this.session?.template === "blank") && (!activeWs.files || Object.keys(activeWs.files).length === 0)) {
       if (this.session) {
         this.session.workspace_name = activeWs.name;
         this.session.session_code = this.session.session_code || activeWs.session_code;
@@ -1863,7 +2037,7 @@ class FriKodeApp {
     const isStandaloneStatic = this._isStaticMode();
     if (!isStandaloneStatic) {
       try {
-        const res = await api.getFiles();
+        const res = await api.getFiles(this.session?.session_code);
         if (res && res.tree && res.tree.length > 0) {
           this.treeData = res.tree;
           this._renderFileTree();
@@ -1874,9 +2048,6 @@ class FriKodeApp {
       }
     }
 
-    if (!activeWs) {
-      activeWs = this.workspaceStore.createWorkspace("My Project", "python", this.session?.session_code);
-    }
     if (this.session) {
       this.session.workspace_name = activeWs.name;
       this.session.session_code = this.session.session_code || activeWs.session_code;
@@ -2015,7 +2186,17 @@ You are currently viewing FriKode hosted live on GitHub Pages!
           `;
 
           rowEl.onclick = () => {
-            const initial = (this.role === "participant") ? null : (node.content !== undefined ? node.content : null);
+            let initial = null;
+            if (this.role !== "participant") {
+              if (node.content !== undefined && node.content !== null) {
+                initial = node.content;
+              } else {
+                const activeWs = this.session?.session_code ? this.workspaceStore.getWorkspaceByCode(this.session.session_code) : this.workspaceStore.getActiveWorkspace();
+                if (activeWs && activeWs.files && activeWs.files[node.path]) {
+                  initial = activeWs.files[node.path].content;
+                }
+              }
+            }
             this.editorManager.openFile(node.path, initial);
             this._renderFileTree();
             this.toggleMobileSidebar(false);
@@ -2563,6 +2744,8 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       }
       this.editorManager?.closeAllTabs();
       if (this.signalingWs) this.signalingWs.close();
+      this.session = null;
+      api.setSessionCode(null);
       this.switchView("homeView");
     };
 

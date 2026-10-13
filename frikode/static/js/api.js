@@ -6,10 +6,15 @@
 export class FriKodeApi {
   constructor(baseUrl = "") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.sessionCode = null;
   }
 
   setBaseUrl(url) {
     this.baseUrl = url.replace(/\/$/, "");
+  }
+
+  setSessionCode(code) {
+    this.sessionCode = code ? code.trim() : null;
   }
 
   async _fetch(endpoint, options = {}, timeoutMs = 4000) {
@@ -17,15 +22,18 @@ export class FriKodeApi {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+    const headers = {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+      ...(this.sessionCode ? { "X-Session-Code": this.sessionCode } : {}),
+      ...(options.headers || {})
+    };
+
     try {
       const res = await fetch(url, {
         cache: "no-store",
         signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache",
-          ...options.headers
-        },
+        headers,
         ...options
       });
       clearTimeout(timer);
@@ -53,13 +61,14 @@ export class FriKodeApi {
     return this._fetch("/api/session");
   }
 
-  async createSession(workspacePath, initSample = false, template = "") {
+  async createSession(workspacePath, initSample = false, template = "", files = null) {
     return this._fetch("/api/session/create", {
       method: "POST",
       body: JSON.stringify({
         workspace_path: workspacePath,
         init_sample: initSample,
-        template: template
+        template: template,
+        files: files
       })
     });
   }
@@ -70,13 +79,17 @@ export class FriKodeApi {
     });
   }
 
-  async getFiles() {
-    return this._fetch("/api/files");
+  async getFiles(sessionCode = null) {
+    const code = sessionCode || this.sessionCode;
+    const q = code ? `?session_code=${encodeURIComponent(code)}` : "";
+    return this._fetch(`/api/files${q}`);
   }
 
-  async getFile(path) {
+  async getFile(path, sessionCode = null) {
     const encPath = encodeURIComponent(path);
-    return this._fetch(`/api/file?path=${encPath}`);
+    const code = sessionCode || this.sessionCode;
+    const q = code ? `&session_code=${encodeURIComponent(code)}` : "";
+    return this._fetch(`/api/file?path=${encPath}${q}`);
   }
 
   async saveFile(path, content = null, savedBy = "Peer") {

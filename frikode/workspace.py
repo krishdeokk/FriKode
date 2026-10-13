@@ -299,6 +299,89 @@ class Workspace:
         for rel_path, content in files.items():
             self.create_file(rel_path, content)
 
+    def clear(self) -> None:
+        """Removes all files and subdirectories within the workspace root."""
+        for item in os.listdir(self.root_path):
+            p = os.path.join(self.root_path, item)
+            if os.path.isdir(p):
+                shutil.rmtree(p, ignore_errors=True)
+            else:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+
+    def populate_files(self, files: Dict[str, Any]) -> None:
+        """Populates the workspace with a dict of files and directories."""
+        for path_key, item in files.items():
+            if isinstance(item, dict):
+                is_dir = item.get("is_dir", False)
+                content = item.get("content", "")
+                rel_path = item.get("path") or path_key
+            else:
+                is_dir = False
+                content = str(item)
+                rel_path = path_key
+
+            clean_rel = rel_path.strip().replace("\\", "/").lstrip("/")
+            if not clean_rel:
+                continue
+            if is_dir:
+                self.create_folder(clean_rel)
+            else:
+                self.write_file(clean_rel, content)
+
+    def init_template(self, template: str, name: str = "Project") -> None:
+        """Initializes a specific workspace starter template."""
+        if template == "python":
+            self.create_file(
+                "main.py",
+                f"# FriKode • Python Workspace\n"
+                f"# Real-time pair programming & compiler console\n\n"
+                f"def greet(name):\n"
+                f"    return f\"Welcome to {{name}}!\"\n\n"
+                f"def main():\n"
+                f"    msg = greet(\"{name}\")\n"
+                f"    print(msg)\n"
+                f"    print(\"1. Edit any code in the editor.\")\n"
+                f"    print(\"2. Press Cmd/Ctrl + Enter to run.\")\n\n"
+                f"if __name__ == \"__main__\":\n"
+                f"    main()\n"
+            )
+            self.create_file(
+                "README.md",
+                f"# {name}\n\nCollaborative Python workspace created in FriKode.\n"
+            )
+        elif template == "web":
+            self.create_file(
+                "index.html",
+                f"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <title>{name}</title>\n  <link rel=\"stylesheet\" href=\"style.css\">\n</head>\n<body>\n  <main class=\"hero\">\n    <h1>{name}</h1>\n    <p>Live collaborative web application built in FriKode.</p>\n    <button id=\"btnCounter\">Clicks: 0</button>\n  </main>\n  <script src=\"app.js\"></script>\n</body>\n</html>\n"
+            )
+            self.create_file(
+                "style.css",
+                "body {\n  font-family: system-ui, -apple-system, sans-serif;\n  background: #fdfbf7;\n  color: #111827;\n  display: grid;\n  place-items: center;\n  min-height: 100vh;\n  margin: 0;\n}\n.hero {\n  text-align: center;\n  background: #ffffff;\n  padding: 32px 40px;\n  border-radius: 12px;\n  border: 1px solid #e5e7eb;\n  box-shadow: 0 4px 12px rgba(0,0,0,0.05);\n}\nbutton {\n  background: #050505;\n  color: #fff;\n  border: none;\n  padding: 10px 22px;\n  border-radius: 8px;\n  font-weight: 600;\n  cursor: pointer;\n}\n"
+            )
+            self.create_file(
+                "app.js",
+                f"// Web Application Logic\nconsole.log(\"App loaded for {name}\");\n\nlet count = 0;\nconst btn = document.getElementById(\"btnCounter\");\nif (btn) {{\n  btn.addEventListener(\"click\", () => {{\n    count++;\n    btn.textContent = \"Clicks: \" + count;\n    console.log(\"Counter updated to:\", count);\n  }});\n}}\n"
+            )
+            self.create_file(
+                "README.md",
+                f"# {name}\n\nWeb App project (HTML + CSS + JS).\n"
+            )
+        elif template == "c":
+            self.create_file(
+                "main.c",
+                f"#include <stdio.h>\n\nint main() {{\n    printf(\"FriKode C Workspace: %s\\n\", \"{name}\");\n    printf(\"Real-time collaborative code editor\\n\");\n    return 0;\n}}\n"
+            )
+            self.create_file(
+                "README.md",
+                f"# {name}\n\nC/C++ Project created with FriKode.\n"
+            )
+        elif template in ("blank", "folder"):
+            pass
+
+
     @staticmethod
     def detect_language(file_path: str) -> str:
         """Maps file extensions to CodeMirror modes."""
