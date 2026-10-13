@@ -31,6 +31,11 @@ EXT_MAP = {
     ".js": "javascript",
     ".mjs": "javascript",
     ".cjs": "javascript",
+    ".rs": "rust",
+    ".go": "go",
+    ".java": "java",
+    ".html": "html",
+    ".htm": "html",
 }
 
 
@@ -51,14 +56,24 @@ class CodeRunner:
 
         if code:
             code_lower = code.lower().strip()
-            if "#include" in code_lower and ("<stdio.h>" in code_lower or "printf" in code_lower):
-                return "c"
             if "#include" in code_lower and ("<iostream>" in code_lower or "std::cout" in code_lower):
                 return "cpp"
+            if "#include" in code_lower and ("<stdio.h>" in code_lower or "printf" in code_lower):
+                return "c"
+            if "fn main()" in code or "println!(" in code:
+                return "rust"
+            if "package main" in code and "func main(" in code:
+                return "go"
+            if "public class " in code and "static void main" in code:
+                return "java"
+            if "<!doctype html" in code_lower or "<html" in code_lower:
+                return "html"
             if "import " in code or "def " in code or "print(" in code:
                 return "python"
             if "console.log" in code or "function " in code or "const " in code or "let " in code:
                 return "javascript"
+            if "echo " in code or "#!/bin/" in code:
+                return "bash"
 
         return "python"
 
@@ -141,15 +156,25 @@ class CodeRunner:
                 res = self._run_bash(target_file, work_dir, stdin_data, timeout)
             elif lang == "javascript":
                 res = self._run_javascript(target_file, work_dir, stdin_data, timeout)
-            else:
-                return {
-                    "status": "unsupported",
-                    "language": lang,
+            elif lang == "rust":
+                res, temp_bin = self._run_rust(target_file, work_dir, stdin_data, timeout)
+            elif lang == "go":
+                res = self._run_go(target_file, work_dir, stdin_data, timeout)
+            elif lang == "html":
+                res = {
+                    "status": "client_eval",
                     "stdout": "",
-                    "stderr": f"Execution for language '{lang}' is not supported yet.",
-                    "exit_code": 1,
-                    "duration_ms": 0,
-                    "file": os.path.basename(target_file)
+                    "stderr": "",
+                    "exit_code": 0,
+                    "client_eval": True
+                }
+            else:
+                res = {
+                    "status": "client_eval",
+                    "stdout": "",
+                    "stderr": f"Native runner for '{lang}' deferring to client execution engine...",
+                    "exit_code": 0,
+                    "client_eval": True
                 }
 
             duration_ms = round((time.perf_counter() - start_time) * 1000, 1)
@@ -224,10 +249,11 @@ class CodeRunner:
         cc = shutil.which("clang") or shutil.which("gcc")
         if not cc:
             return {
-                "status": "error",
+                "status": "client_eval",
                 "stdout": "",
-                "stderr": "C compiler (clang or gcc) not found on system.",
-                "exit_code": 1
+                "stderr": "C compiler (clang/gcc) not installed on host. Running in cloud compiler runner...",
+                "exit_code": 0,
+                "client_eval": True
             }, None
 
         bin_path = file_path + ".out"
@@ -244,10 +270,11 @@ class CodeRunner:
         cxx = shutil.which("clang++") or shutil.which("g++")
         if not cxx:
             return {
-                "status": "error",
+                "status": "client_eval",
                 "stdout": "",
-                "stderr": "C++ compiler (clang++ or g++) not found on system.",
-                "exit_code": 1
+                "stderr": "C++ compiler (clang++/g++) not installed on host. Running in cloud compiler runner...",
+                "exit_code": 0,
+                "client_eval": True
             }, None
 
         bin_path = file_path + ".out"
@@ -259,6 +286,39 @@ class CodeRunner:
 
         exec_res = self._run_process([bin_path], cwd, stdin_data, timeout)
         return exec_res, bin_path
+
+    def _run_rust(self, file_path: str, cwd: str, stdin_data: str, timeout: float):
+        rustc = shutil.which("rustc")
+        if not rustc:
+            return {
+                "status": "client_eval",
+                "stdout": "",
+                "stderr": "Rust compiler (rustc) not installed on host. Running in cloud compiler runner...",
+                "exit_code": 0,
+                "client_eval": True
+            }, None
+
+        bin_path = file_path + ".out"
+        compile_cmd = [rustc, "-O", file_path, "-o", bin_path]
+        comp_res = self._run_process(compile_cmd, cwd, None, timeout=12.0)
+        if comp_res["exit_code"] != 0:
+            comp_res["status"] = "compile_error"
+            return comp_res, None
+
+        exec_res = self._run_process([bin_path], cwd, stdin_data, timeout)
+        return exec_res, bin_path
+
+    def _run_go(self, file_path: str, cwd: str, stdin_data: str, timeout: float) -> Dict[str, Any]:
+        go_bin = shutil.which("go")
+        if not go_bin:
+            return {
+                "status": "client_eval",
+                "stdout": "",
+                "stderr": "Go compiler not installed on host. Running in cloud compiler runner...",
+                "exit_code": 0,
+                "client_eval": True
+            }
+        return self._run_process([go_bin, "run", file_path], cwd, stdin_data, timeout)
 
     def _run_bash(self, file_path: str, cwd: str, stdin_data: str, timeout: float) -> Dict[str, Any]:
         bash_bin = shutil.which("bash") or "/bin/bash"

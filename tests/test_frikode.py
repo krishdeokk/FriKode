@@ -260,6 +260,10 @@ class TestCodeRunner(unittest.TestCase):
         self.assertEqual(self.runner.detect_language("algo.cpp"), "cpp")
         self.assertEqual(self.runner.detect_language("deploy.sh"), "bash")
         self.assertEqual(self.runner.detect_language("index.js"), "javascript")
+        self.assertEqual(self.runner.detect_language("main.rs"), "rust")
+        self.assertEqual(self.runner.detect_language("server.go"), "go")
+        self.assertEqual(self.runner.detect_language("App.java"), "java")
+        self.assertEqual(self.runner.detect_language("index.html"), "html")
 
     def test_python_execution(self):
         res = self.runner.run(code="print('FriKode Runner OK')\nprint(10 + 32)", language="python")

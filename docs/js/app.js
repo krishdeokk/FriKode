@@ -2403,6 +2403,37 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   // -------------------------------------------------------------
   // In-Browser Compiler & Code Execution
   // -------------------------------------------------------------
+  _detectLanguage(path, code = "") {
+    if (path) {
+      const ext = path.split(".").pop().toLowerCase();
+      if (ext === "py") return "python";
+      if (ext === "c" || ext === "h") return "c";
+      if (ext === "cpp" || ext === "cc" || ext === "cxx" || ext === "hpp") return "cpp";
+      if (ext === "js" || ext === "mjs" || ext === "cjs") return "javascript";
+      if (ext === "html" || ext === "htm") return "html";
+      if (ext === "rs") return "rust";
+      if (ext === "sh" || ext === "bash") return "bash";
+      if (ext === "java") return "java";
+      if (ext === "go") return "go";
+      if (ext === "ts" || ext === "tsx") return "typescript";
+      if (ext === "php") return "php";
+      if (ext === "rb") return "ruby";
+    }
+    const c = (code || "").toLowerCase();
+    if (c.includes("#include <iostream>") || c.includes("std::cout")) return "cpp";
+    if (c.includes("#include <stdio.h>") || c.includes("printf(")) return "c";
+    if (c.includes("fn main()") || c.includes("println!(")) return "rust";
+    if (c.includes("package main") && c.includes("func main(")) return "go";
+    if (c.includes("public class ") && c.includes("static void main")) return "java";
+    if (c.includes("<!doctype html") || c.includes("<html") || c.includes("<body")) return "html";
+    if (c.includes("console.log") || c.includes("document.") || c.includes("window.")) return "javascript";
+    if (c.includes("echo ") || c.includes("#!/bin/")) return "bash";
+    return "python";
+  }
+
+  // -------------------------------------------------------------
+  // Multi-Language Compiler & In-Browser Code Execution Engine
+  // -------------------------------------------------------------
   async runCurrentCode(withStdin = false) {
     if (!this.editorManager) return;
     const activePath = this.editorManager.activePath;
@@ -2442,33 +2473,22 @@ You are currently viewing FriKode hosted live on GitHub Pages!
 
     const fileName = activePath ? activePath.split("/").pop() : "snippet";
     const timestamp = new Date().toLocaleTimeString();
+    const lang = this._detectLanguage(activePath, currentCode);
+
+    const compilerLangEl = document.getElementById("compilerLangBadge");
+    if (compilerLangEl) compilerLangEl.textContent = lang.toUpperCase();
 
     // Append launch header to output
-    const startNotice = `\n[${timestamp}] ▶ Running ${fileName}...\n` + "─".repeat(45) + "\n";
+    const startNotice = `\n[${timestamp}] ▶ Running ${fileName} (${lang.toUpperCase()})...\n` + "─".repeat(45) + "\n";
     pre.innerHTML += `<span class="output-system">${this._escapeHtml(startNotice)}</span>`;
     pre.scrollTop = pre.scrollHeight;
 
     const isStandaloneStatic = this._isStaticMode();
-    const isPython = activePath?.endsWith(".py") || (!activePath?.endsWith(".js") && (currentCode.includes("print(") || currentCode.includes("def ") || currentCode.includes("import ")));
-    const isJs = activePath?.endsWith(".js") || activePath?.endsWith(".html");
 
-    // If running in standalone static web mode (GitHub Pages), execute directly in browser!
+    // If running in standalone static web mode (GitHub Pages), execute directly in browser or cloud compiler!
     if (isStandaloneStatic) {
       try {
-        if (isPython) {
-          await this._runPythonInBrowser(currentCode, stdinVal, pre, statusBadge, beacon, statusDot);
-        } else if (isJs) {
-          this._runJavaScriptInBrowser(currentCode, pre, statusBadge, beacon, statusDot);
-        } else {
-          pre.innerHTML += `<span class="output-dim">[FriKode Web Preview Sandbox]\n</span>`;
-          pre.innerHTML += `<span class="output-stdout">✓ Code ready in web mode.\nTo compile C/C++ or Rust natively with gcc/clang, connect to a live FriKode Python host or run: python3 run.py\n</span>`;
-          if (statusBadge) {
-            statusBadge.className = "compiler-badge status success";
-            statusBadge.textContent = "Web Preview";
-          }
-          if (beacon) beacon.className = "compiler-beacon success";
-          if (statusDot) statusDot.className = "status-mini-dot active";
-        }
+        await this._executeLanguage(lang, currentCode, stdinVal, pre, statusBadge, beacon, statusDot);
       } finally {
         if (btnRun) btnRun.classList.remove("running");
         if (runText) runText.textContent = "Run";
@@ -2485,9 +2505,12 @@ You are currently viewing FriKode hosted live on GitHub Pages!
         userName: this.user.name
       });
 
-      // If language was JavaScript and host doesn't have Node, evaluate in browser safely
+      // If language was deferred to client execution engine
       if (res.client_eval) {
-        this._runJavaScriptInBrowser(currentCode, pre, statusBadge, beacon, statusDot);
+        if (res.stderr) {
+          pre.innerHTML += `<span class="output-dim">${this._escapeHtml(res.stderr)}\n</span>`;
+        }
+        await this._executeLanguage(lang, currentCode, stdinVal, pre, statusBadge, beacon, statusDot);
       } else {
         // Output stdout if any
         if (res.stdout) {
@@ -2537,23 +2560,169 @@ You are currently viewing FriKode hosted live on GitHub Pages!
         }
       }
     } catch (err) {
-      if (isPython) {
-        await this._runPythonInBrowser(currentCode, stdinVal, pre, statusBadge, beacon, statusDot);
-      } else if (isJs) {
-        this._runJavaScriptInBrowser(currentCode, pre, statusBadge, beacon, statusDot);
-      } else {
-        pre.innerHTML += `<span class="output-stderr">Failed to reach execution runner: ${this._escapeHtml(err.message || String(err))}\n</span>`;
-        if (statusBadge) {
-          statusBadge.className = "compiler-badge status error";
-          statusBadge.textContent = "Error";
-        }
-        if (beacon) beacon.className = "compiler-beacon error";
-      }
+      pre.innerHTML += `<span class="output-dim">Host connection offline/unavailable. Switching to cloud execution runner...\n</span>`;
+      await this._executeLanguage(lang, currentCode, stdinVal, pre, statusBadge, beacon, statusDot);
     } finally {
       if (btnRun) btnRun.classList.remove("running");
       if (runText) runText.textContent = "Run";
       pre.scrollTop = pre.scrollHeight;
     }
+  }
+
+  async _executeLanguage(lang, code, stdinVal, pre, statusBadge, beacon, statusDot) {
+    if (lang === "python") {
+      await this._runPythonInBrowser(code, stdinVal, pre, statusBadge, beacon, statusDot);
+    } else if (lang === "javascript") {
+      this._runJavaScriptInBrowser(code, pre, statusBadge, beacon, statusDot);
+    } else if (lang === "html") {
+      this._runHtmlPreview(code, pre, statusBadge, beacon, statusDot);
+    } else if (lang === "c") {
+      await this._runWithWandbox("gcc-head-c", code, stdinVal, pre, statusBadge, beacon, statusDot, "C (GCC)");
+    } else if (lang === "cpp") {
+      await this._runWithWandbox("gcc-head", code, stdinVal, pre, statusBadge, beacon, statusDot, "C++ (GCC)");
+    } else if (lang === "rust") {
+      await this._runWithWandbox("rust-1.82.0", code, stdinVal, pre, statusBadge, beacon, statusDot, "Rust");
+    } else if (lang === "bash") {
+      await this._runWithWandbox("bash", code, stdinVal, pre, statusBadge, beacon, statusDot, "Bash");
+    } else if (lang === "java") {
+      await this._runWithWandbox("openjdk-jdk-22+36", code, stdinVal, pre, statusBadge, beacon, statusDot, "Java");
+    } else if (lang === "go") {
+      await this._runWithWandbox("go-1.23.2", code, stdinVal, pre, statusBadge, beacon, statusDot, "Go");
+    } else if (lang === "typescript") {
+      await this._runWithWandbox("typescript-5.6.2", code, stdinVal, pre, statusBadge, beacon, statusDot, "TypeScript");
+    } else if (lang === "php") {
+      await this._runWithWandbox("php-8.3.12", code, stdinVal, pre, statusBadge, beacon, statusDot, "PHP");
+    } else if (lang === "ruby") {
+      await this._runWithWandbox("ruby-4.0.2", code, stdinVal, pre, statusBadge, beacon, statusDot, "Ruby");
+    } else {
+      await this._runWithWandbox("gcc-head", code, stdinVal, pre, statusBadge, beacon, statusDot, lang.toUpperCase());
+    }
+  }
+
+  async _runWithWandbox(compiler, code, stdinVal, pre, statusBadge, beacon, statusDot, langName = "Compiler") {
+    const startTime = performance.now();
+    pre.innerHTML += `<span class="output-dim">[${langName} Engine] Compiling & executing with ${compiler}...\n</span>`;
+    pre.scrollTop = pre.scrollHeight;
+
+    try {
+      const payload = {
+        compiler: compiler,
+        code: code,
+        stdin: stdinVal || ""
+      };
+
+      const res = await fetch("https://wandbox.org/api/compile.json", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        throw new Error(`Compiler service returned HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const elapsed = Math.round(performance.now() - startTime);
+
+      // Compiler warnings or errors
+      const compErr = data.compiler_error || data.compiler_message;
+      if (compErr && compErr.trim()) {
+        pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(compErr.trim())}\n</span>`;
+      }
+
+      // Program stdout
+      const progOut = data.program_output || data.program_message;
+      if (progOut) {
+        pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(progOut)}</span>`;
+        if (!progOut.endsWith("\n")) pre.innerHTML += "\n";
+      }
+
+      // Program stderr
+      const progErr = data.program_error;
+      if (progErr && progErr !== progOut) {
+        pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(progErr)}</span>`;
+        if (!progErr.endsWith("\n")) pre.innerHTML += "\n";
+      }
+
+      const exitCode = parseInt(data.status, 10);
+      const isOk = exitCode === 0 && !data.signal;
+
+      if (isOk) {
+        pre.innerHTML += `<span class="output-success">✓ Process finished with exit code 0 (${elapsed}ms)\n</span>`;
+        if (statusBadge) {
+          statusBadge.className = "compiler-badge status success";
+          statusBadge.textContent = `${langName} (${elapsed}ms)`;
+        }
+        if (beacon) beacon.className = "compiler-beacon success";
+        if (statusDot) statusDot.className = "status-mini-dot active";
+      } else {
+        const errorDesc = data.signal ? `Terminated by signal ${data.signal}` : `Process exited with code ${data.status || 1}`;
+        pre.innerHTML += `<span class="output-stderr">✕ ${errorDesc} (${elapsed}ms)\n</span>`;
+        if (statusBadge) {
+          statusBadge.className = "compiler-badge status error";
+          statusBadge.textContent = `Exit ${data.status || 1} (${elapsed}ms)`;
+        }
+        if (beacon) beacon.className = "compiler-beacon error";
+        if (statusDot) statusDot.className = "status-mini-dot";
+      }
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - startTime);
+      pre.innerHTML += `<span class="output-stderr">✕ Compilation runner failed: ${this._escapeHtml(err.message || String(err))}\n</span>`;
+      if (statusBadge) {
+        statusBadge.className = "compiler-badge status error";
+        statusBadge.textContent = "Error";
+      }
+      if (beacon) beacon.className = "compiler-beacon error";
+      if (statusDot) statusDot.className = "status-mini-dot";
+    } finally {
+      pre.scrollTop = pre.scrollHeight;
+    }
+  }
+
+  _runHtmlPreview(htmlCode, pre, statusBadge, beacon, statusDot) {
+    const startTime = performance.now();
+    pre.innerHTML += `<span class="output-dim">[Web Live Preview Engine] Rendering HTML/CSS/JS in interactive sandbox...\n</span>`;
+    
+    const frameId = "htmlPreviewFrame_" + Date.now();
+    pre.innerHTML += `
+      <div class="html-live-preview-box" style="margin: 8px 0; border: 1px solid #444; border-radius: 6px; overflow: hidden; background: #fff;">
+        <div style="background: #1e1e1e; color: #888; padding: 4px 10px; font-size: 11px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333;">
+          <span style="font-weight: 600; color: #cbd5e1;">🌐 Live Web Preview</span>
+          <button id="btnOpenNewTabPreview_${frameId}" style="background: #2d3748; color: #e2e8f0; border: 1px solid #4a5568; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer;">Open in New Tab ↗</button>
+        </div>
+        <iframe id="${frameId}" sandbox="allow-scripts allow-modals" style="width: 100%; height: 260px; border: none; background: #fff;"></iframe>
+      </div>
+    `;
+
+    setTimeout(() => {
+      const frame = document.getElementById(frameId);
+      if (frame) {
+        const doc = frame.contentDocument || frame.contentWindow.document;
+        doc.open();
+        doc.write(htmlCode);
+        doc.close();
+      }
+      const newTabBtn = document.getElementById(`btnOpenNewTabPreview_${frameId}`);
+      if (newTabBtn) {
+        newTabBtn.onclick = () => {
+          const blob = new Blob([htmlCode], { type: "text/html" });
+          const url = URL.createObjectURL(blob);
+          window.open(url, "_blank");
+        };
+      }
+    }, 60);
+
+    const elapsed = Math.round(performance.now() - startTime);
+    pre.innerHTML += `<span class="output-success">✓ Rendered web preview successfully (${elapsed}ms)\n</span>`;
+    if (statusBadge) {
+      statusBadge.className = "compiler-badge status success";
+      statusBadge.textContent = `HTML Preview (${elapsed}ms)`;
+    }
+    if (beacon) beacon.className = "compiler-beacon success";
+    if (statusDot) statusDot.className = "status-mini-dot active";
+    pre.scrollTop = pre.scrollHeight;
   }
 
   async _runPythonInBrowser(code, stdinVal, pre, statusBadge, beacon, statusDot) {
@@ -2616,6 +2785,11 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       if (beacon) beacon.className = "compiler-beacon success";
       if (statusDot) statusDot.className = "status-mini-dot active";
     } catch (pyErr) {
+      if (pyErr.message && (pyErr.message.includes("Could not load Python WebAssembly") || pyErr.message.includes("CDN"))) {
+        pre.innerHTML += `<span class="output-dim">Wasm CDN unavailable, switching to Wandbox Python runner...\n</span>`;
+        await this._runWithWandbox("cpython-head", code, stdinVal, pre, statusBadge, beacon, statusDot, "Python (CPython)");
+        return;
+      }
       const elapsed = Math.round(performance.now() - startTime);
       const errStr = pyErr.message || String(pyErr);
       pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(errStr)}\n</span>`;
