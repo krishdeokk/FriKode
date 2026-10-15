@@ -719,11 +719,33 @@ class FriKodeApp {
     bindClick("btnClearOutput", () => this.clearCompilerOutput());
     bindClick("btnToggleStdin", () => this.toggleStdinBar());
     bindClick("btnRunStdin", () => this.runCurrentCode(true));
+    bindClick("btnCloseStdin", () => this.toggleStdinBar(false));
+    bindClick("btnClearStdin", () => {
+      const el = document.getElementById("compilerStdinInput");
+      if (el) {
+        el.value = "";
+        el.focus();
+      }
+    });
+
+    const langSelect = document.getElementById("compilerLangSelect");
+    if (langSelect) {
+      langSelect.onchange = (e) => {
+        const val = e.target.value;
+        this.forcedLanguage = val === "auto" ? null : val;
+        const badge = document.getElementById("compilerLangBadge");
+        if (badge) badge.textContent = val.toUpperCase();
+      };
+    }
 
     const stdinInput = document.getElementById("compilerStdinInput");
     if (stdinInput) {
       stdinInput.onkeydown = (e) => {
-        if (e.key === "Enter") this.runCurrentCode(true);
+        // Ctrl+Enter or Cmd+Enter executes code with stdin
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+          e.preventDefault();
+          this.runCurrentCode(true);
+        }
       };
     }
 
@@ -3001,7 +3023,53 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   // -------------------------------------------------------------
   // In-Browser Compiler & Code Execution
   // -------------------------------------------------------------
+  _requiresInput(code) {
+    if (!code) return false;
+    const c = code.toLowerCase();
+    return c.includes("scanf(") ||
+           c.includes("cin >>") ||
+           c.includes("cin>>") ||
+           c.includes("getline(") ||
+           c.includes("getchar(") ||
+           c.includes("gets(") ||
+           c.includes("fgets(") ||
+           c.includes("input(") ||
+           c.includes("sys.stdin") ||
+           c.includes("scanner(") ||
+           c.includes("nextline(") ||
+           c.includes("nextint(") ||
+           c.includes("readline(");
+  }
+
   _detectLanguage(path, code = "") {
+    // 1. If explicit language forced by user via compiler dropdown, honor it
+    if (this.forcedLanguage && this.forcedLanguage !== "auto") {
+      return this.forcedLanguage;
+    }
+
+    const c = (code || "").toLowerCase();
+
+    // 2. Strong code signatures override extension if user pasted code into another file (e.g. C code in main.py)
+    if (c.includes("#include <iostream>") || c.includes("std::cout") || c.includes("std::cin") || c.includes("using namespace std")) {
+      return "cpp";
+    }
+    if (c.includes("#include") || (c.includes("int main(") && c.includes("printf(")) || (c.includes("void main(") && c.includes("printf("))) {
+      return "c";
+    }
+    if (c.includes("public class ") && (c.includes("static void main") || c.includes("public static void main"))) {
+      return "java";
+    }
+    if (c.includes("fn main()") || (c.includes("fn ") && c.includes("println!("))) {
+      return "rust";
+    }
+    if (c.includes("package main") && c.includes("func main(")) {
+      return "go";
+    }
+    if (c.includes("<!doctype html") || c.includes("<html") || c.includes("<body")) {
+      return "html";
+    }
+
+    // 3. Fallback to path extension
     if (path) {
       const ext = path.split(".").pop().toLowerCase();
       if (ext === "py") return "python";
@@ -3016,15 +3084,12 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       if (ext === "ts" || ext === "tsx") return "typescript";
       if (ext === "php") return "php";
       if (ext === "rb") return "ruby";
+      if (ext === "cs") return "csharp";
     }
-    const c = (code || "").toLowerCase();
-    if (c.includes("#include <iostream>") || c.includes("std::cout")) return "cpp";
-    if (c.includes("#include <stdio.h>") || c.includes("printf(")) return "c";
-    if (c.includes("fn main()") || c.includes("println!(")) return "rust";
-    if (c.includes("package main") && c.includes("func main(")) return "go";
-    if (c.includes("public class ") && c.includes("static void main")) return "java";
-    if (c.includes("<!doctype html") || c.includes("<html") || c.includes("<body")) return "html";
-    if (c.includes("console.log") || c.includes("document.") || c.includes("window.")) return "javascript";
+
+    // 4. Other general code signatures
+    if (c.includes("import ") || c.includes("def ") || c.includes("print(")) return "python";
+    if (c.includes("console.log") || c.includes("document.") || c.includes("window.") || c.includes("const ") || c.includes("let ")) return "javascript";
     if (c.includes("echo ") || c.includes("#!/bin/")) return "bash";
     return "python";
   }
@@ -3076,9 +3141,24 @@ You are currently viewing FriKode hosted live on GitHub Pages!
     const compilerLangEl = document.getElementById("compilerLangBadge");
     if (compilerLangEl) compilerLangEl.textContent = lang.toUpperCase();
 
+    const compilerLangSelect = document.getElementById("compilerLangSelect");
+    if (compilerLangSelect && !this.forcedLanguage) {
+      // Keep dropdown in sync if not manually forced
+      compilerLangSelect.value = "auto";
+    }
+
+    // Check if code contains input operations
+    const needsInput = this._requiresInput(currentCode);
+    if (needsInput && !stdinVal.trim()) {
+      this.toggleStdinBar(true);
+    }
+
     // Append launch header to output
     const startNotice = `\n[${timestamp}] ▶ Running ${fileName} (${lang.toUpperCase()})...\n` + "─".repeat(45) + "\n";
     pre.innerHTML += `<span class="output-system">${this._escapeHtml(startNotice)}</span>`;
+    if (needsInput && !stdinVal.trim()) {
+      pre.innerHTML += `<span class="output-dim">💡 Input operations (scanf / cin / input) detected. If needed, enter input in the drawer above and press "Run with Input" (or Ctrl+Enter).\n</span>`;
+    }
     pre.scrollTop = pre.scrollHeight;
 
     const isStandaloneStatic = this._isStaticMode();
@@ -3099,6 +3179,7 @@ You are currently viewing FriKode hosted live on GitHub Pages!
       const res = await api.runCode({
         path: activePath,
         code: currentCode,
+        language: lang,
         stdin: stdinVal,
         userName: this.user.name
       });
@@ -3125,6 +3206,9 @@ You are currently viewing FriKode hosted live on GitHub Pages!
         // Output summary status
         if (res.status === "success") {
           pre.innerHTML += `<span class="output-success">✓ Process finished with exit code ${res.exit_code} (${res.duration_ms}ms)\n</span>`;
+          if (needsInput && !stdinVal.trim()) {
+            pre.innerHTML += `<span class="output-dim">💡 Tip: To pass graph adjacency matrix or test cases to scanf(), enter them in the STDIN drawer above and click "Run with Input".\n</span>`;
+          }
           if (statusBadge) {
             statusBadge.className = "compiler-badge status success";
             statusBadge.textContent = `Exit: ${res.exit_code} (${res.duration_ms}ms)`;
@@ -3168,115 +3252,246 @@ You are currently viewing FriKode hosted live on GitHub Pages!
   }
 
   async _executeLanguage(lang, code, stdinVal, pre, statusBadge, beacon, statusDot) {
-    if (lang === "python") {
-      await this._runPythonInBrowser(code, stdinVal, pre, statusBadge, beacon, statusDot);
-    } else if (lang === "javascript") {
-      this._runJavaScriptInBrowser(code, pre, statusBadge, beacon, statusDot);
-    } else if (lang === "html") {
+    if (lang === "html") {
       this._runHtmlPreview(code, pre, statusBadge, beacon, statusDot);
-    } else if (lang === "c") {
-      await this._runWithWandbox("gcc-head-c", code, stdinVal, pre, statusBadge, beacon, statusDot, "C (GCC)");
-    } else if (lang === "cpp") {
-      await this._runWithWandbox("gcc-head", code, stdinVal, pre, statusBadge, beacon, statusDot, "C++ (GCC)");
-    } else if (lang === "rust") {
-      await this._runWithWandbox("rust-1.82.0", code, stdinVal, pre, statusBadge, beacon, statusDot, "Rust");
-    } else if (lang === "bash") {
-      await this._runWithWandbox("bash", code, stdinVal, pre, statusBadge, beacon, statusDot, "Bash");
-    } else if (lang === "java") {
-      await this._runWithWandbox("openjdk-jdk-22+36", code, stdinVal, pre, statusBadge, beacon, statusDot, "Java");
-    } else if (lang === "go") {
-      await this._runWithWandbox("go-1.23.2", code, stdinVal, pre, statusBadge, beacon, statusDot, "Go");
-    } else if (lang === "typescript") {
-      await this._runWithWandbox("typescript-5.6.2", code, stdinVal, pre, statusBadge, beacon, statusDot, "TypeScript");
-    } else if (lang === "php") {
-      await this._runWithWandbox("php-8.3.12", code, stdinVal, pre, statusBadge, beacon, statusDot, "PHP");
-    } else if (lang === "ruby") {
-      await this._runWithWandbox("ruby-4.0.2", code, stdinVal, pre, statusBadge, beacon, statusDot, "Ruby");
-    } else {
-      await this._runWithWandbox("gcc-head", code, stdinVal, pre, statusBadge, beacon, statusDot, lang.toUpperCase());
+      return;
     }
+    if (lang === "javascript") {
+      try {
+        this._runJavaScriptInBrowser(code, pre, statusBadge, beacon, statusDot);
+        return;
+      } catch (_) {}
+    }
+    if (lang === "python" && !stdinVal && window.loadPyodide) {
+      try {
+        await this._runPythonInBrowser(code, stdinVal, pre, statusBadge, beacon, statusDot);
+        return;
+      } catch (_) {}
+    }
+
+    // Run via robust multi-language cloud runner (Judge0 CE + Wandbox fallback)
+    await this._runWithCloudCompiler(lang, code, stdinVal, pre, statusBadge, beacon, statusDot);
   }
 
-  async _runWithWandbox(compiler, code, stdinVal, pre, statusBadge, beacon, statusDot, langName = "Compiler") {
+  async _runWithCloudCompiler(lang, code, stdinVal, pre, statusBadge, beacon, statusDot) {
     const startTime = performance.now();
-    pre.innerHTML += `<span class="output-dim">[${langName} Engine] Compiling & executing with ${compiler}...\n</span>`;
+
+    const judge0Map = {
+      "c": 103, // C (GCC 14.1.0)
+      "cpp": 105, // C++ (GCC 14.1.0)
+      "python": 100, // Python (3.12.5)
+      "javascript": 102, // JavaScript (Node.js 22.08.0)
+      "typescript": 101, // TypeScript (5.6.2)
+      "java": 91, // Java (JDK 17.0.6)
+      "rust": 108, // Rust (1.85.0)
+      "go": 107, // Go (1.23.5)
+      "bash": 46, // Bash (5.0.0)
+      "sh": 46,
+      "php": 98, // PHP (8.3.11)
+      "ruby": 72, // Ruby (2.7.0)
+      "csharp": 51 // C# (Mono 6.6.0.161)
+    };
+
+    const wandboxMap = {
+      "c": "gcc-13.2.0-c",
+      "cpp": "gcc-13.2.0",
+      "python": "cpython-3.12.7",
+      "javascript": "nodejs-20.17.0",
+      "typescript": "typescript-5.6.2",
+      "java": "openjdk-jdk-22+36",
+      "rust": "rust-1.82.0",
+      "go": "go-1.23.2",
+      "bash": "bash",
+      "sh": "bash",
+      "php": "php-8.3.12",
+      "ruby": "ruby-4.0.2"
+    };
+
+    const langName = {
+      "c": "C (GCC 14)",
+      "cpp": "C++ (GCC 14)",
+      "python": "Python 3.12",
+      "javascript": "Node.js 22",
+      "typescript": "TypeScript 5.6",
+      "java": "Java (JDK 17)",
+      "rust": "Rust 1.85",
+      "go": "Go 1.23",
+      "bash": "Bash 5.0",
+      "sh": "Shell",
+      "php": "PHP 8.3",
+      "ruby": "Ruby 2.7",
+      "csharp": "C# (.NET)"
+    }[lang] || lang.toUpperCase();
+
+    pre.innerHTML += `<span class="output-dim">[${langName} Engine] Compiling & running in cloud sandbox...\n</span>`;
     pre.scrollTop = pre.scrollHeight;
 
+    // Strategy 1: Judge0 CE API (Fast, Free, CORS-enabled for all domains)
+    const judge0Id = judge0Map[lang] || 103;
     try {
-      const payload = {
-        compiler: compiler,
-        code: code,
-        stdin: stdinVal || ""
-      };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
 
+      const resp = await fetch("https://ce.judge0.com/submissions?base64_encoded=false&wait=true", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          source_code: code,
+          language_id: judge0Id,
+          stdin: stdinVal || ""
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const elapsed = Math.round(performance.now() - startTime);
+
+        // Compilation error or warnings
+        if (data.compile_output && data.compile_output.trim()) {
+          pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(data.compile_output.trim())}\n</span>`;
+        }
+
+        // Standard Output
+        if (data.stdout) {
+          pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(data.stdout)}</span>`;
+          if (!data.stdout.endsWith("\n")) pre.innerHTML += "\n";
+        }
+
+        // Standard Error
+        if (data.stderr) {
+          pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(data.stderr)}</span>`;
+          if (!data.stderr.endsWith("\n")) pre.innerHTML += "\n";
+        }
+
+        const statusId = data.status?.id;
+        const statusDesc = data.status?.description || "Completed";
+
+        if (statusId === 3) {
+          pre.innerHTML += `<span class="output-success">✓ Process finished successfully (${elapsed}ms)\n</span>`;
+          if (this._requiresInput(code) && !stdinVal.trim()) {
+            pre.innerHTML += `<span class="output-dim">💡 Tip: To pass inputs (e.g. vertices, test cases), enter them in the STDIN drawer above and click "Run with Input".\n</span>`;
+          }
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status success";
+            statusBadge.textContent = `${lang.toUpperCase()} (${elapsed}ms)`;
+          }
+          if (beacon) beacon.className = "compiler-beacon success";
+          if (statusDot) statusDot.className = "status-mini-dot active";
+          return;
+        } else if (statusId === 6) {
+          pre.innerHTML += `<span class="output-stderr">✕ Compilation failed (${elapsed}ms)\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status error";
+            statusBadge.textContent = `Compile Error (${elapsed}ms)`;
+          }
+          if (beacon) beacon.className = "compiler-beacon error";
+          if (statusDot) statusDot.className = "status-mini-dot";
+          return;
+        } else if (statusId === 5) {
+          pre.innerHTML += `<span class="output-stderr">✕ Time Limit Exceeded (${elapsed}ms)\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status error";
+            statusBadge.textContent = "Timeout";
+          }
+          if (beacon) beacon.className = "compiler-beacon error";
+          if (statusDot) statusDot.className = "status-mini-dot";
+          return;
+        } else {
+          pre.innerHTML += `<span class="output-stderr">✕ ${this._escapeHtml(statusDesc)} (${elapsed}ms)\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status error";
+            statusBadge.textContent = `${statusDesc} (${elapsed}ms)`;
+          }
+          if (beacon) beacon.className = "compiler-beacon error";
+          if (statusDot) statusDot.className = "status-mini-dot";
+          return;
+        }
+      }
+    } catch (jErr) {
+      console.warn("[FriKode] Judge0 primary compiler failed, trying secondary fallback:", jErr);
+    }
+
+    // Strategy 2: Wandbox Secondary Fallback
+    const wandboxCompiler = wandboxMap[lang] || "gcc-13.2.0";
+    try {
+      pre.innerHTML += `<span class="output-dim">Switching to secondary compiler service (${wandboxCompiler})...\n</span>`;
       const res = await fetch("https://wandbox.org/api/compile.json", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          compiler: wandboxCompiler,
+          code: code,
+          stdin: stdinVal || ""
+        })
       });
 
-      if (!res.ok) {
-        throw new Error(`Compiler service returned HTTP ${res.status}`);
-      }
+      if (res.ok) {
+        const data = await res.json();
+        const elapsed = Math.round(performance.now() - startTime);
 
-      const data = await res.json();
-      const elapsed = Math.round(performance.now() - startTime);
-
-      // Compiler warnings or errors
-      const compErr = data.compiler_error || data.compiler_message;
-      if (compErr && compErr.trim()) {
-        pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(compErr.trim())}\n</span>`;
-      }
-
-      // Program stdout
-      const progOut = data.program_output || data.program_message;
-      if (progOut) {
-        pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(progOut)}</span>`;
-        if (!progOut.endsWith("\n")) pre.innerHTML += "\n";
-      }
-
-      // Program stderr
-      const progErr = data.program_error;
-      if (progErr && progErr !== progOut) {
-        pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(progErr)}</span>`;
-        if (!progErr.endsWith("\n")) pre.innerHTML += "\n";
-      }
-
-      const exitCode = parseInt(data.status, 10);
-      const isOk = exitCode === 0 && !data.signal;
-
-      if (isOk) {
-        pre.innerHTML += `<span class="output-success">✓ Process finished with exit code 0 (${elapsed}ms)\n</span>`;
-        if (statusBadge) {
-          statusBadge.className = "compiler-badge status success";
-          statusBadge.textContent = `${langName} (${elapsed}ms)`;
+        const compErr = data.compiler_error || data.compiler_message;
+        if (compErr && compErr.trim()) {
+          pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(compErr.trim())}\n</span>`;
         }
-        if (beacon) beacon.className = "compiler-beacon success";
-        if (statusDot) statusDot.className = "status-mini-dot active";
-      } else {
-        const errorDesc = data.signal ? `Terminated by signal ${data.signal}` : `Process exited with code ${data.status || 1}`;
-        pre.innerHTML += `<span class="output-stderr">✕ ${errorDesc} (${elapsed}ms)\n</span>`;
-        if (statusBadge) {
-          statusBadge.className = "compiler-badge status error";
-          statusBadge.textContent = `Exit ${data.status || 1} (${elapsed}ms)`;
+
+        const progOut = data.program_output || data.program_message;
+        if (progOut) {
+          pre.innerHTML += `<span class="output-stdout">${this._escapeHtml(progOut)}</span>`;
+          if (!progOut.endsWith("\n")) pre.innerHTML += "\n";
         }
-        if (beacon) beacon.className = "compiler-beacon error";
-        if (statusDot) statusDot.className = "status-mini-dot";
+
+        const progErr = data.program_error;
+        if (progErr && progErr !== progOut) {
+          pre.innerHTML += `<span class="output-stderr">${this._escapeHtml(progErr)}</span>`;
+          if (!progErr.endsWith("\n")) pre.innerHTML += "\n";
+        }
+
+        const exitCode = parseInt(data.status, 10);
+        if (exitCode === 0 && !data.signal) {
+          pre.innerHTML += `<span class="output-success">✓ Process finished with exit code 0 (${elapsed}ms)\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status success";
+            statusBadge.textContent = `${langName} (${elapsed}ms)`;
+          }
+          if (beacon) beacon.className = "compiler-beacon success";
+          if (statusDot) statusDot.className = "status-mini-dot active";
+          return;
+        } else {
+          const desc = data.signal ? `Terminated by signal ${data.signal}` : `Process exited with code ${data.status || 1}`;
+          pre.innerHTML += `<span class="output-stderr">✕ ${desc} (${elapsed}ms)\n</span>`;
+          if (statusBadge) {
+            statusBadge.className = "compiler-badge status error";
+            statusBadge.textContent = `Exit ${data.status || 1}`;
+          }
+          if (beacon) beacon.className = "compiler-beacon error";
+          if (statusDot) statusDot.className = "status-mini-dot";
+          return;
+        }
       }
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startTime);
-      pre.innerHTML += `<span class="output-stderr">✕ Compilation runner failed: ${this._escapeHtml(err.message || String(err))}\n</span>`;
-      if (statusBadge) {
-        statusBadge.className = "compiler-badge status error";
-        statusBadge.textContent = "Error";
-      }
-      if (beacon) beacon.className = "compiler-beacon error";
-      if (statusDot) statusDot.className = "status-mini-dot";
-    } finally {
-      pre.scrollTop = pre.scrollHeight;
+    } catch (wErr) {
+      console.warn("[FriKode] Wandbox fallback also failed:", wErr);
     }
+
+    // Strategy 3: Language-specific fallback (e.g. Pyodide for python)
+    if (lang === "python") {
+      await this._runPythonInBrowser(code, stdinVal, pre, statusBadge, beacon, statusDot);
+      return;
+    }
+
+    const elapsed = Math.round(performance.now() - startTime);
+    pre.innerHTML += `<span class="output-stderr">✕ Compiler cloud service currently unreachable. Please check your internet connection or run the local backend server.\n</span>`;
+    if (statusBadge) {
+      statusBadge.className = "compiler-badge status error";
+      statusBadge.textContent = "Offline";
+    }
+    if (beacon) beacon.className = "compiler-beacon error";
+    if (statusDot) statusDot.className = "status-mini-dot";
   }
 
   _runHtmlPreview(htmlCode, pre, statusBadge, beacon, statusDot) {
@@ -3477,13 +3692,14 @@ You are currently viewing FriKode hosted live on GitHub Pages!
     }
   }
 
-  toggleStdinBar() {
+  toggleStdinBar(forceOpen = null) {
     const bar = document.getElementById("compilerStdinBar");
     if (!bar) return;
-    const isOpen = bar.style.display !== "none";
-    bar.style.display = isOpen ? "none" : "flex";
-    if (!isOpen) {
-      document.getElementById("compilerStdinInput")?.focus();
+    const isCurrentlyOpen = bar.style.display !== "none";
+    const shouldOpen = forceOpen !== null ? forceOpen : !isCurrentlyOpen;
+    bar.style.display = shouldOpen ? "flex" : "none";
+    if (shouldOpen) {
+      setTimeout(() => document.getElementById("compilerStdinInput")?.focus(), 50);
     }
   }
 

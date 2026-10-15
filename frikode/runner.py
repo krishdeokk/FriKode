@@ -49,25 +49,32 @@ class CodeRunner:
 
     def detect_language(self, path: Optional[str], code: Optional[str] = None) -> str:
         """Determines programming language from filename or code snippet."""
+        # 1. If code contains unmistakable language signatures (like C/C++ #include, Java main, Rust, Go, HTML),
+        # prioritize code signatures so pasting C code into main.py or untitled file is correctly identified.
+        if code:
+            code_lower = code.lower().strip()
+            if "#include" in code_lower and ("<iostream>" in code_lower or "std::cout" in code_lower or "std::cin" in code_lower or "using namespace std" in code_lower):
+                return "cpp"
+            if "#include" in code_lower or ("int main(" in code_lower and "printf" in code_lower) or ("void main(" in code_lower and "printf" in code_lower):
+                return "c"
+            if "public class " in code and ("static void main" in code or "public static void main" in code):
+                return "java"
+            if "fn main()" in code or "println!(" in code:
+                return "rust"
+            if "package main" in code and "func main(" in code:
+                return "go"
+            if "<!doctype html" in code_lower or "<html" in code_lower:
+                return "html"
+
+        # 2. Check path extension
         if path:
             _, ext = os.path.splitext(path.lower())
             if ext in EXT_MAP:
                 return EXT_MAP[ext]
 
+        # 3. Check code for other language signatures
         if code:
             code_lower = code.lower().strip()
-            if "#include" in code_lower and ("<iostream>" in code_lower or "std::cout" in code_lower):
-                return "cpp"
-            if "#include" in code_lower and ("<stdio.h>" in code_lower or "printf" in code_lower):
-                return "c"
-            if "fn main()" in code or "println!(" in code:
-                return "rust"
-            if "package main" in code and "func main(" in code:
-                return "go"
-            if "public class " in code and "static void main" in code:
-                return "java"
-            if "<!doctype html" in code_lower or "<html" in code_lower:
-                return "html"
             if "import " in code or "def " in code or "print(" in code:
                 return "python"
             if "console.log" in code or "function " in code or "const " in code or "let " in code:
@@ -104,7 +111,10 @@ class CodeRunner:
                     "c": ".c",
                     "cpp": ".cpp",
                     "bash": ".sh",
-                    "javascript": ".js"
+                    "javascript": ".js",
+                    "java": ".java",
+                    "rust": ".rs",
+                    "go": ".go",
                 }.get(lang, ".txt")
                 
                 # Write to temp file inside workspace so relative imports/assets work
@@ -152,6 +162,8 @@ class CodeRunner:
                 res, temp_bin = self._run_c(target_file, work_dir, stdin_data, timeout)
             elif lang == "cpp":
                 res, temp_bin = self._run_cpp(target_file, work_dir, stdin_data, timeout)
+            elif lang == "java":
+                res, temp_bin = self._run_java(target_file, work_dir, stdin_data, timeout)
             elif lang in ("bash", "sh"):
                 res = self._run_bash(target_file, work_dir, stdin_data, timeout)
             elif lang == "javascript":
@@ -256,7 +268,8 @@ class CodeRunner:
                 "client_eval": True
             }, None
 
-        bin_path = file_path + ".out"
+        ext = ".exe" if os.name == "nt" else ".out"
+        bin_path = file_path + ext
         compile_cmd = [cc, "-O2", file_path, "-o", bin_path, "-lm"]
         comp_res = self._run_process(compile_cmd, cwd, None, timeout=8.0)
         if comp_res["exit_code"] != 0:
@@ -277,7 +290,8 @@ class CodeRunner:
                 "client_eval": True
             }, None
 
-        bin_path = file_path + ".out"
+        ext = ".exe" if os.name == "nt" else ".out"
+        bin_path = file_path + ext
         compile_cmd = [cxx, "-std=c++17", "-O2", file_path, "-o", bin_path, "-lm"]
         comp_res = self._run_process(compile_cmd, cwd, None, timeout=10.0)
         if comp_res["exit_code"] != 0:
@@ -286,6 +300,44 @@ class CodeRunner:
 
         exec_res = self._run_process([bin_path], cwd, stdin_data, timeout)
         return exec_res, bin_path
+
+    def _run_java(self, file_path: str, cwd: str, stdin_data: str, timeout: float):
+        javac = shutil.which("javac")
+        java = shutil.which("java")
+        if not javac or not java:
+            return {
+                "status": "client_eval",
+                "stdout": "",
+                "stderr": "Java compiler (javac/java) not installed on host. Running in cloud compiler runner...",
+                "exit_code": 0,
+                "client_eval": True
+            }, None
+
+        class_name = os.path.splitext(os.path.basename(file_path))[0]
+        # Check if code specifies a public class name
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            import re
+            m = re.search(r'public\s+class\s+([A-Za-z0-9_]+)', content)
+            if m:
+                pub_class = m.group(1)
+                if pub_class != class_name:
+                    new_file = os.path.join(cwd, f"{pub_class}.java")
+                    shutil.copy2(file_path, new_file)
+                    file_path = new_file
+                    class_name = pub_class
+        except Exception:
+            pass
+
+        compile_cmd = [javac, "-encoding", "UTF-8", file_path]
+        comp_res = self._run_process(compile_cmd, cwd, None, timeout=12.0)
+        if comp_res["exit_code"] != 0:
+            comp_res["status"] = "compile_error"
+            return comp_res, None
+
+        exec_res = self._run_process([java, "-cp", cwd, class_name], cwd, stdin_data, timeout)
+        return exec_res, os.path.join(cwd, f"{class_name}.class")
 
     def _run_rust(self, file_path: str, cwd: str, stdin_data: str, timeout: float):
         rustc = shutil.which("rustc")
@@ -298,7 +350,8 @@ class CodeRunner:
                 "client_eval": True
             }, None
 
-        bin_path = file_path + ".out"
+        ext = ".exe" if os.name == "nt" else ".out"
+        bin_path = file_path + ext
         compile_cmd = [rustc, "-O", file_path, "-o", bin_path]
         comp_res = self._run_process(compile_cmd, cwd, None, timeout=12.0)
         if comp_res["exit_code"] != 0:

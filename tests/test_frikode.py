@@ -353,22 +353,85 @@ class TestCodeRunner(unittest.TestCase):
         self.assertNotEqual(res["exit_code"], 0)
         self.assertIn("ValueError: intentional test error", res["stderr"])
 
-    def test_c_compilation_and_execution(self):
+    def test_smart_detect_language_overrides_extension(self):
+        # Even if path is main.py, C code with #include should be detected as C
+        c_snippet = "#include <stdio.h>\nint main() { printf(\"hi\"); return 0; }"
+        self.assertEqual(self.runner.detect_language("main.py", code=c_snippet), "c")
+
+        # C++ snippet
+        cpp_snippet = "#include <iostream>\nint main() { std::cout << 42; return 0; }"
+        self.assertEqual(self.runner.detect_language("main.py", code=cpp_snippet), "cpp")
+
+        # Java snippet
+        java_snippet = "public class Hello { public static void main(String[] args) {} }"
+        self.assertEqual(self.runner.detect_language("test.txt", code=java_snippet), "java")
+
+    def test_c_interactive_bfs_execution(self):
         import shutil
         if not shutil.which("clang") and not shutil.which("gcc"):
             self.skipTest("C compiler not available")
 
-        c_code = """
+        bfs_code = """
         #include <stdio.h>
+        int graph[10][10], visited[10];
+        int queue[10];
+        int front = -1, rear = -1;
+        int n;
+
+        void BFS(int start) {
+            int i, vertex;
+            visited[start] = 1;
+            queue[++rear] = start;
+            while (front != rear) {
+                vertex = queue[++front];
+                printf("%d ", vertex);
+                for (i = 0; i < n; i++) {
+                    if (graph[vertex][i] == 1 && visited[i] == 0) {
+                        visited[i] = 1;
+                        queue[++rear] = i;
+                    }
+                }
+            }
+        }
+
         int main() {
-            printf("C Code Output: %d\\n", 21 * 2);
+            int i, j, start;
+            scanf("%d", &n);
+            for (i = 0; i < n; i++) {
+                for (j = 0; j < n; j++) {
+                    scanf("%d", &graph[i][j]);
+                }
+            }
+            for (i = 0; i < n; i++) visited[i] = 0;
+            scanf("%d", &start);
+            printf("BFS Traversal: ");
+            BFS(start);
             return 0;
         }
         """
-        res = self.runner.run(code=c_code, language="c")
+        stdin_input = "4\n0 1 1 0\n1 0 0 1\n1 0 0 1\n0 1 1 0\n0\n"
+        res = self.runner.run(path="main.py", code=bfs_code, stdin_data=stdin_input, language="auto")
         self.assertEqual(res["status"], "success")
-        self.assertIn("C Code Output: 42", res["stdout"])
         self.assertEqual(res["exit_code"], 0)
+        self.assertEqual(res["language"], "c")
+        self.assertIn("BFS Traversal: 0 1 2 3", res["stdout"])
+
+    def test_cpp_compilation_and_execution(self):
+        import shutil
+        if not shutil.which("clang++") and not shutil.which("g++"):
+            self.skipTest("C++ compiler not available")
+
+        cpp_code = """
+        #include <iostream>
+        int main() {
+            int a = 15, b = 27;
+            std::cout << "Sum: " << (a + b) << std::endl;
+            return 0;
+        }
+        """
+        res = self.runner.run(code=cpp_code, language="cpp")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Sum: 42", res["stdout"])
 
 
 if __name__ == "__main__":

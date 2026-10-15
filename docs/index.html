@@ -462,6 +462,22 @@
                   <span>Console &amp; Output</span>
                 </span>
                 <span class="compiler-badge lang" id="compilerLangBadge">PYTHON</span>
+                <select class="compiler-lang-select" id="compilerLangSelect" title="Select programming language / compiler">
+                  <option value="auto">Auto Detect</option>
+                  <option value="c">C (GCC 14 / Clang)</option>
+                  <option value="cpp">C++ (G++ 14 / Clang++)</option>
+                  <option value="python">Python 3</option>
+                  <option value="javascript">JavaScript (Node.js)</option>
+                  <option value="html">HTML5 (Live Web Preview)</option>
+                  <option value="java">Java (JDK 17)</option>
+                  <option value="rust">Rust 1.85</option>
+                  <option value="go">Go 1.23</option>
+                  <option value="bash">Bash / Shell</option>
+                  <option value="typescript">TypeScript</option>
+                  <option value="php">PHP 8</option>
+                  <option value="ruby">Ruby</option>
+                  <option value="csharp">C# (Mono)</option>
+                </select>
                 <span class="compiler-badge status" id="compilerStatusBadge">Ready</span>
               </div>
               <div class="compiler-header-right">
@@ -481,11 +497,26 @@
               </div>
             </div>
 
-            <!-- Stdin Input Drawer (for interactive programs like input() or scanf()) -->
+            <!-- Stdin Input Drawer (for interactive programs like scanf(), cin, input()) -->
             <div class="compiler-stdin-bar" id="compilerStdinBar" style="display: none;">
-              <span class="stdin-prompt">INPUT &gt;</span>
-              <input type="text" class="stdin-input mono" id="compilerStdinInput" placeholder="Standard input (stdin) for script (e.g. values separated by newline)...">
-              <button class="mbot-btn mbot-btn-lime" id="btnRunStdin" style="padding: 4px 10px; font-size: 11px;">Run with Input</button>
+              <div class="stdin-bar-header">
+                <div class="stdin-header-title">
+                  <span class="stdin-prompt">⌨ STANDARD INPUT (STDIN)</span>
+                  <span class="stdin-hint">For programs using scanf(), cin, or input(). Enter multiple lines or values below:</span>
+                </div>
+                <button class="compiler-action-btn" id="btnCloseStdin" title="Hide Input Drawer" style="padding: 2px 8px; font-size: 11px;">
+                  <span>✕</span>
+                </button>
+              </div>
+              <textarea class="stdin-textarea mono" id="compilerStdinInput" rows="3" placeholder="Enter input values here...&#10;e.g. for BFS graph:&#10;4&#10;0 1 1 0&#10;1 0 0 1&#10;1 0 0 1&#10;0 1 1 0&#10;0"></textarea>
+              <div class="stdin-bar-footer">
+                <button class="mbot-btn mbot-btn-lime" id="btnRunStdin" style="padding: 5px 14px; font-size: 11px; font-weight: 700;">
+                  ▶ Run with Input (Ctrl+Enter)
+                </button>
+                <button class="mbot-btn mbot-btn-secondary" id="btnClearStdin" style="padding: 5px 12px; font-size: 11px;">
+                  Clear Input
+                </button>
+              </div>
             </div>
 
             <!-- Terminal Output Area -->

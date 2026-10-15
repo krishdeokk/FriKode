@@ -469,7 +469,10 @@ export class EditorManager {
       case "rs": return "rust";
       case "c":
       case "cpp":
-      case "h": return "clike";
+      case "h":
+      case "hpp":
+      case "java":
+      case "cs": return "clike";
       default: return "null";
     }
   }
